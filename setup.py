@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from setuptools import setup
 
-PLUGIN_ENTRY_POINT = 'ovos-tts-plugin-polly = ' \
-                     'ovos_tts_plugin_polly:PollyTTS'
+PLUGIN_ENTRY_POINT = 'ovos-tts-plugin-polly = ovos_tts_plugin_polly:PollyTTS'
+SAMPLE_CONFIGS = 'ovos-tts-plugin-polly.config = ovos_tts_plugin_polly:PollyTTSPluginConfig'
+
 setup(
     name='ovos-tts-plugin-polly',
     version='0.0.1',
@@ -23,5 +24,6 @@ setup(
         'Programming Language :: Python :: 3'
     ],
     keywords='OpenVoiceOS mycroft neon chatterbox plugin tts',
-    entry_points={'mycroft.plugin.tts': PLUGIN_ENTRY_POINT}
+    entry_points={'mycroft.plugin.tts': PLUGIN_ENTRY_POINT,
+                  'mycroft.plugin.tts.config': SAMPLE_CONFIGS}
 )
