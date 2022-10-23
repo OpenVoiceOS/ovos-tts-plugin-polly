@@ -1,7 +1,7 @@
 import logging
 
-import boto3
 from ovos_plugin_manager.templates.tts import TTS, TTSValidator
+from ovos_utils.skills.settings import settings2meta
 
 logging.getLogger('botocore').setLevel(logging.CRITICAL)
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
@@ -10,15 +10,12 @@ logging.getLogger('urllib3.util.retry').setLevel(logging.CRITICAL)
 
 class PollyTTS(TTS):
     def __init__(self, *args, **kwargs):
+        ssml_tags = ["speak", "say-as", "voice", "prosody", "break",
+                     "emphasis", "sub", "lang", "phoneme", "w", "whisper",
+                     "amazon:auto-breaths", "p", "s", "amazon:effect", "mark"]
         super().__init__(*args, **kwargs, audio_ext="mp3",
-                         ssml_tags=["speak", "say-as", "voice",
-                                    "prosody", "break",
-                                    "emphasis", "sub", "lang",
-                                    "phoneme", "w", "whisper",
-                                    "amazon:auto-breaths",
-                                    "p", "s", "amazon:effect",
-                                    "mark"],
-                         validator=PollyTTSValidator(self))
+                         ssml_tags=ssml_tags, validator=PollyTTSValidator(self))
+        import boto3
         # Catch Chinese alt code
         if self.lang.lower() == "zh-zh":
             self.lang = "cmn-cn"
@@ -33,7 +30,15 @@ class PollyTTS(TTS):
                                    aws_secret_access_key=self.key,
                                    region_name=self.region).client('polly')
 
-    def get_tts(self, sentence, wav_file):
+    def get_tts(self, sentence, wav_file, lang=None, voice=None):
+        if lang:
+            if voice:
+                pass
+                # TODO - validate that selected voice matches the lang
+            else:
+                # TODO - get default voice for lang
+                pass
+        voice = voice or self.voice
         text_type = "text"
         if self.remove_ssml(sentence) != sentence:
             text_type = "ssml"
@@ -44,7 +49,7 @@ class PollyTTS(TTS):
             OutputFormat=self.audio_ext,
             Text=sentence,
             TextType=text_type,
-            VoiceId=self.voice.title())
+            VoiceId=voice.title())
 
         with open(wav_file, 'wb') as f:
             f.write(response['AudioStream'].read())
@@ -66,8 +71,8 @@ class PollyTTSValidator(TTSValidator):
         super(PollyTTSValidator, self).__init__(tts)
 
     def validate_lang(self):
-        # TODO
-        pass
+        langs = [l.lower() for l in PollyTTSPluginConfig.keys()]
+        assert self.tts.lang.lower() in langs
 
     def validate_dependencies(self):
         try:
@@ -77,95 +82,164 @@ class PollyTTSValidator(TTSValidator):
                 'PollyTTS dependencies not installed, please run pip install '
                 'boto3 ')
 
-    def validate_connection(self):
-        try:
-            if not self.tts.voice:
-                raise Exception("Polly TTS Voice not configured")
-            output = self.tts.describe_voices()
-        except TypeError:
-            raise Exception(
-                'PollyTTS server could not be verified. Please check your '
-                'internet connection and credentials.')
-
     def get_tts_class(self):
         return PollyTTS
 
 
 PollyTTSPluginConfig = {
-    'en-US': [{'display_name': 'Kevin', 'voice': 'Kevin', 'lang': 'en-US', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Salli', 'voice': 'Salli', 'lang': 'en-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Matthew', 'voice': 'Matthew', 'lang': 'en-US', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Kimberly', 'voice': 'Kimberly', 'lang': 'en-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Kendra', 'voice': 'Kendra', 'lang': 'en-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Justin', 'voice': 'Justin', 'lang': 'en-US', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Joey', 'voice': 'Joey', 'lang': 'en-US', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Joanna', 'voice': 'Joanna', 'lang': 'en-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Ivy', 'voice': 'Ivy', 'lang': 'en-US', 'offline': False, 'gender': 'female', "priority": 40}],
-    'tr-TR': [{'display_name': 'Filiz', 'voice': 'Filiz', 'lang': 'tr-TR', 'offline': False, 'gender': 'female', "priority": 40}],
-    'sv-SE': [{'display_name': 'Astrid', 'voice': 'Astrid', 'lang': 'sv-SE', 'offline': False, 'gender': 'female', "priority": 40}],
-    'ru-RU': [{'display_name': 'Tatyana', 'voice': 'Tatyana', 'lang': 'ru-RU', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Maxim', 'voice': 'Maxim', 'lang': 'ru-RU', 'offline': False, 'gender': 'male', "priority": 40}],
-    'ro-RO': [{'display_name': 'Carmen', 'voice': 'Carmen', 'lang': 'ro-RO', 'offline': False, 'gender': 'female', "priority": 40}],
-    'pt-PT': [{'display_name': 'Ines', 'voice': 'Ines', 'lang': 'pt-PT', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Cristiano', 'voice': 'Cristiano', 'lang': 'pt-PT', 'offline': False, 'gender': 'male', "priority": 40}],
-    'pt-BR': [{'display_name': 'Vitoria', 'voice': 'Vitoria', 'lang': 'pt-BR', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Ricardo', 'voice': 'Ricardo', 'lang': 'pt-BR', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Camila', 'voice': 'Camila', 'lang': 'pt-BR', 'offline': False, 'gender': 'female', "priority": 40}],
-    'pl-PL': [{'display_name': 'Maja', 'voice': 'Maja', 'lang': 'pl-PL', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Jan', 'voice': 'Jan', 'lang': 'pl-PL', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Jacek', 'voice': 'Jacek', 'lang': 'pl-PL', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Ewa', 'voice': 'Ewa', 'lang': 'pl-PL', 'offline': False, 'gender': 'female', "priority": 40}],
-    'nl-NL': [{'display_name': 'Ruben', 'voice': 'Ruben', 'lang': 'nl-NL', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Lotte', 'voice': 'Lotte', 'lang': 'nl-NL', 'offline': False, 'gender': 'female', "priority": 40}],
-    'nb-NO': [{'display_name': 'Liv', 'voice': 'Liv', 'lang': 'nb-NO', 'offline': False, 'gender': 'female', "priority": 40}],
-    'ko-KR': [{'display_name': 'Seoyeon', 'voice': 'Seoyeon', 'lang': 'ko-KR', 'offline': False, 'gender': 'female', "priority": 40}],
-    'ja-JP': [{'display_name': 'Takumi', 'voice': 'Takumi', 'lang': 'ja-JP', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Mizuki', 'voice': 'Mizuki', 'lang': 'ja-JP', 'offline': False, 'gender': 'female', "priority": 40}],
-    'it-IT': [{'display_name': 'Bianca', 'voice': 'Bianca', 'lang': 'it-IT', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Giorgio', 'voice': 'Giorgio', 'lang': 'it-IT', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Carla', 'voice': 'Carla', 'lang': 'it-IT', 'offline': False, 'gender': 'female', "priority": 40}],
-    'is-IS': [{'display_name': 'Karl', 'voice': 'Karl', 'lang': 'is-IS', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Dora', 'voice': 'Dora', 'lang': 'is-IS', 'offline': False, 'gender': 'female', "priority": 40}],
-    'fr-FR': [{'display_name': 'Mathieu', 'voice': 'Mathieu', 'lang': 'fr-FR', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Lea', 'voice': 'Lea', 'lang': 'fr-FR', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Celine', 'voice': 'Celine', 'lang': 'fr-FR', 'offline': False, 'gender': 'female', "priority": 40}],
-    'fr-CA': [{'display_name': 'Chantal', 'voice': 'Chantal', 'lang': 'fr-CA', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Gabrielle', 'voice': 'Gabrielle', 'lang': 'fr-CA', 'offline': False,
-               'gender': 'female', "priority": 40},
-              {'display_name': 'Liam', 'voice': 'Liam', 'lang': 'fr-CA', 'offline': False, 'gender': 'male', "priority": 40}],
-    'es-US': [{'display_name': 'Penelope', 'voice': 'Penelope', 'lang': 'es-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Miguel', 'voice': 'Miguel', 'lang': 'es-US', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Lupe', 'voice': 'Lupe', 'lang': 'es-US', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Pedro', 'voice': 'Pedro', 'lang': 'es-US', 'offline': False, 'gender': 'male', "priority": 40}],
-    'es-MX': [{'display_name': 'Mia', 'voice': 'Mia', 'lang': 'es-MX', 'offline': False, 'gender': 'female', "priority": 40}],
-    'es-ES': [{'display_name': 'Lucia', 'voice': 'Lucia', 'lang': 'es-ES', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Enrique', 'voice': 'Enrique', 'lang': 'es-ES', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Conchita', 'voice': 'Conchita', 'lang': 'es-ES', 'offline': False, 'gender': 'female', "priority": 40}],
-    'en-GB-WLS': [
-        {'display_name': 'Geraint', 'voice': 'Geraint', 'lang': 'en-GB-WLS', 'offline': False, 'gender': 'male', "priority": 40}],
-    'en-NZ': [{'display_name': 'Aria', 'voice': 'Aria', 'lang': 'en-NZ', 'offline': False, 'gender': 'female', "priority": 40}],
-    'en-ZA': [{'display_name': 'Ayanda', 'voice': 'Ayanda', 'lang': 'en-ZA', 'offline': False, 'gender': 'female', "priority": 40}],
-    'en-IN': [{'display_name': 'Raveena', 'voice': 'Raveena', 'lang': 'en-IN', 'offline': False, 'gender': 'female', "priority": 40}],
-    'hi-IN': [{'display_name': 'Aditi', 'voice': 'Aditi', 'lang': 'en-IN', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Kajal', 'voice': 'Kajal', 'lang': 'en-IN', 'offline': False, 'gender': 'female', "priority": 40}],
-    'en-GB': [{'display_name': 'Emma', 'voice': 'Emma', 'lang': 'en-GB', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Brian', 'voice': 'Brian', 'lang': 'en-GB', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Amy', 'voice': 'Amy', 'lang': 'en-GB', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Arthur', 'voice': 'Arthur', 'lang': 'en-GB', 'offline': False, 'gender': 'male', "priority": 40}],
-    'en-AU': [{'display_name': 'Russell', 'voice': 'Russell', 'lang': 'en-AU', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Nicole', 'voice': 'Nicole', 'lang': 'en-AU', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Olivia', 'voice': 'Olivia', 'lang': 'en-AU', 'offline': False, 'gender': 'female', "priority": 40}],
-    'de-DE': [{'display_name': 'Vicki', 'voice': 'Vicki', 'lang': 'de-DE', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Marlene', 'voice': 'Marlene', 'lang': 'de-DE', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Hans', 'voice': 'Hans', 'lang': 'de-DE', 'offline': False, 'gender': 'male', "priority": 40},
-              {'display_name': 'Daniel', 'voice': 'Daniel', 'lang': 'de-DE', 'offline': False, 'gender': 'male', "priority": 40}],
-    'da-DK': [{'display_name': 'Naja', 'voice': 'Naja', 'lang': 'da-DK', 'offline': False, 'gender': 'female', "priority": 40},
-              {'display_name': 'Mads', 'voice': 'Mads', 'lang': 'da-DK', 'offline': False, 'gender': 'male', "priority": 40}],
-    'cy-GB': [{'display_name': 'Gwyneth', 'voice': 'Gwyneth', 'lang': 'cy-GB', 'offline': False, 'gender': 'female', "priority": 40}],
-    'cmn-CN': [{'display_name': 'Zhiyu', 'voice': 'Zhiyu', 'lang': 'cmn-CN', 'offline': False, 'gender': 'female', "priority": 40}],
-    'arb': [{'display_name': 'Zeina', 'voice': 'Zeina', 'lang': 'arb', 'offline': False, 'gender': 'female', "priority": 40}],
-    'ca-ES': [{'display_name': 'Arlet', 'voice': 'Arlet', 'lang': 'ca-ES', 'offline': False, 'gender': 'female', "priority": 40}],
-    'de-AT': [{'display_name': 'Hannah', 'voice': 'Hannah', 'lang': 'de-AT', 'offline': False, 'gender': 'female', "priority": 40}]}
+    'en-US': [{'voice': 'Kevin', 'lang': 'en-US',
+               'meta': {'display_name': 'Kevin', 'offline': False, 'gender': 'male', 'priority': 40}},
+              {'voice': 'Salli', 'lang': 'en-US',
+               'meta': {'display_name': 'Salli', 'offline': False, 'gender': 'female', 'priority': 40}},
+              {'voice': 'Matthew', 'lang': 'en-US',
+               'meta': {'display_name': 'Matthew', 'offline': False, 'gender': 'male', 'priority': 40}},
+              {'voice': 'Kimberly', 'lang': 'en-US',
+               'meta': {'display_name': 'Kimberly', 'offline': False, 'gender': 'female', 'priority': 40}},
+              {'voice': 'Kendra', 'lang': 'en-US',
+               'meta': {'display_name': 'Kendra', 'offline': False, 'gender': 'female', 'priority': 40}},
+              {'voice': 'Justin', 'lang': 'en-US',
+               'meta': {'display_name': 'Justin', 'offline': False, 'gender': 'male', 'priority': 40}},
+              {'voice': 'Joey', 'lang': 'en-US',
+               'meta': {'display_name': 'Joey', 'offline': False, 'gender': 'male', 'priority': 40}},
+              {'voice': 'Joanna', 'lang': 'en-US',
+               'meta': {'display_name': 'Joanna', 'offline': False, 'gender': 'female', 'priority': 40}},
+              {'voice': 'Ivy', 'lang': 'en-US',
+               'meta': {'display_name': 'Ivy', 'offline': False, 'gender': 'female', 'priority': 40}}], 'tr-TR': [
+        {'voice': 'Filiz', 'lang': 'tr-TR',
+         'meta': {'display_name': 'Filiz', 'offline': False, 'gender': 'female', 'priority': 40}}], 'sv-SE': [
+        {'voice': 'Astrid', 'lang': 'sv-SE',
+         'meta': {'display_name': 'Astrid', 'offline': False, 'gender': 'female', 'priority': 40}}], 'ru-RU': [
+        {'voice': 'Tatyana', 'lang': 'ru-RU',
+         'meta': {'display_name': 'Tatyana', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Maxim', 'lang': 'ru-RU',
+         'meta': {'display_name': 'Maxim', 'offline': False, 'gender': 'male', 'priority': 40}}], 'ro-RO': [
+        {'voice': 'Carmen', 'lang': 'ro-RO',
+         'meta': {'display_name': 'Carmen', 'offline': False, 'gender': 'female', 'priority': 40}}], 'pt-PT': [
+        {'voice': 'Ines', 'lang': 'pt-PT',
+         'meta': {'display_name': 'Ines', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Cristiano', 'lang': 'pt-PT',
+         'meta': {'display_name': 'Cristiano', 'offline': False, 'gender': 'male', 'priority': 40}}], 'pt-BR': [
+        {'voice': 'Vitoria', 'lang': 'pt-BR',
+         'meta': {'display_name': 'Vitoria', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Ricardo', 'lang': 'pt-BR',
+         'meta': {'display_name': 'Ricardo', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Camila', 'lang': 'pt-BR',
+         'meta': {'display_name': 'Camila', 'offline': False, 'gender': 'female', 'priority': 40}}], 'pl-PL': [
+        {'voice': 'Maja', 'lang': 'pl-PL',
+         'meta': {'display_name': 'Maja', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Jan', 'lang': 'pl-PL',
+         'meta': {'display_name': 'Jan', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Jacek', 'lang': 'pl-PL',
+         'meta': {'display_name': 'Jacek', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Ewa', 'lang': 'pl-PL',
+         'meta': {'display_name': 'Ewa', 'offline': False, 'gender': 'female', 'priority': 40}}], 'nl-NL': [
+        {'voice': 'Ruben', 'lang': 'nl-NL',
+         'meta': {'display_name': 'Ruben', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Lotte', 'lang': 'nl-NL',
+         'meta': {'display_name': 'Lotte', 'offline': False, 'gender': 'female', 'priority': 40}}], 'nb-NO': [
+        {'voice': 'Liv', 'lang': 'nb-NO',
+         'meta': {'display_name': 'Liv', 'offline': False, 'gender': 'female', 'priority': 40}}], 'ko-KR': [
+        {'voice': 'Seoyeon', 'lang': 'ko-KR',
+         'meta': {'display_name': 'Seoyeon', 'offline': False, 'gender': 'female', 'priority': 40}}], 'ja-JP': [
+        {'voice': 'Takumi', 'lang': 'ja-JP',
+         'meta': {'display_name': 'Takumi', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Mizuki', 'lang': 'ja-JP',
+         'meta': {'display_name': 'Mizuki', 'offline': False, 'gender': 'female', 'priority': 40}}], 'it-IT': [
+        {'voice': 'Bianca', 'lang': 'it-IT',
+         'meta': {'display_name': 'Bianca', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Giorgio', 'lang': 'it-IT',
+         'meta': {'display_name': 'Giorgio', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Carla', 'lang': 'it-IT',
+         'meta': {'display_name': 'Carla', 'offline': False, 'gender': 'female', 'priority': 40}}], 'is-IS': [
+        {'voice': 'Karl', 'lang': 'is-IS',
+         'meta': {'display_name': 'Karl', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Dora', 'lang': 'is-IS',
+         'meta': {'display_name': 'Dora', 'offline': False, 'gender': 'female', 'priority': 40}}], 'fr-FR': [
+        {'voice': 'Mathieu', 'lang': 'fr-FR',
+         'meta': {'display_name': 'Mathieu', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Lea', 'lang': 'fr-FR',
+         'meta': {'display_name': 'Lea', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Celine', 'lang': 'fr-FR',
+         'meta': {'display_name': 'Celine', 'offline': False, 'gender': 'female', 'priority': 40}}], 'fr-CA': [
+        {'voice': 'Chantal', 'lang': 'fr-CA',
+         'meta': {'display_name': 'Chantal', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Gabrielle', 'lang': 'fr-CA',
+         'meta': {'display_name': 'Gabrielle', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Liam', 'lang': 'fr-CA',
+         'meta': {'display_name': 'Liam', 'offline': False, 'gender': 'male', 'priority': 40}}], 'es-US': [
+        {'voice': 'Penelope', 'lang': 'es-US',
+         'meta': {'display_name': 'Penelope', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Miguel', 'lang': 'es-US',
+         'meta': {'display_name': 'Miguel', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Lupe', 'lang': 'es-US',
+         'meta': {'display_name': 'Lupe', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Pedro', 'lang': 'es-US',
+         'meta': {'display_name': 'Pedro', 'offline': False, 'gender': 'male', 'priority': 40}}], 'es-MX': [
+        {'voice': 'Mia', 'lang': 'es-MX',
+         'meta': {'display_name': 'Mia', 'offline': False, 'gender': 'female', 'priority': 40}}], 'es-ES': [
+        {'voice': 'Lucia', 'lang': 'es-ES',
+         'meta': {'display_name': 'Lucia', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Enrique', 'lang': 'es-ES',
+         'meta': {'display_name': 'Enrique', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Conchita', 'lang': 'es-ES',
+         'meta': {'display_name': 'Conchita', 'offline': False, 'gender': 'female', 'priority': 40}}], 'en-GB-WLS': [
+        {'voice': 'Geraint', 'lang': 'en-GB-WLS',
+         'meta': {'display_name': 'Geraint', 'offline': False, 'gender': 'male', 'priority': 40}}], 'en-NZ': [
+        {'voice': 'Aria', 'lang': 'en-NZ',
+         'meta': {'display_name': 'Aria', 'offline': False, 'gender': 'female', 'priority': 40}}], 'en-ZA': [
+        {'voice': 'Ayanda', 'lang': 'en-ZA',
+         'meta': {'display_name': 'Ayanda', 'offline': False, 'gender': 'female', 'priority': 40}}], 'en-IN': [
+        {'voice': 'Raveena', 'lang': 'en-IN',
+         'meta': {'display_name': 'Raveena', 'offline': False, 'gender': 'female', 'priority': 40}}], 'hi-IN': [
+        {'voice': 'Aditi', 'lang': 'en-IN',
+         'meta': {'display_name': 'Aditi', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Kajal', 'lang': 'en-IN',
+         'meta': {'display_name': 'Kajal', 'offline': False, 'gender': 'female', 'priority': 40}}], 'en-GB': [
+        {'voice': 'Emma', 'lang': 'en-GB',
+         'meta': {'display_name': 'Emma', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Brian', 'lang': 'en-GB',
+         'meta': {'display_name': 'Brian', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Amy', 'lang': 'en-GB',
+         'meta': {'display_name': 'Amy', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Arthur', 'lang': 'en-GB',
+         'meta': {'display_name': 'Arthur', 'offline': False, 'gender': 'male', 'priority': 40}}], 'en-AU': [
+        {'voice': 'Russell', 'lang': 'en-AU',
+         'meta': {'display_name': 'Russell', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Nicole', 'lang': 'en-AU',
+         'meta': {'display_name': 'Nicole', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Olivia', 'lang': 'en-AU',
+         'meta': {'display_name': 'Olivia', 'offline': False, 'gender': 'female', 'priority': 40}}], 'de-DE': [
+        {'voice': 'Vicki', 'lang': 'de-DE',
+         'meta': {'display_name': 'Vicki', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Marlene', 'lang': 'de-DE',
+         'meta': {'display_name': 'Marlene', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Hans', 'lang': 'de-DE',
+         'meta': {'display_name': 'Hans', 'offline': False, 'gender': 'male', 'priority': 40}},
+        {'voice': 'Daniel', 'lang': 'de-DE',
+         'meta': {'display_name': 'Daniel', 'offline': False, 'gender': 'male', 'priority': 40}}], 'da-DK': [
+        {'voice': 'Naja', 'lang': 'da-DK',
+         'meta': {'display_name': 'Naja', 'offline': False, 'gender': 'female', 'priority': 40}},
+        {'voice': 'Mads', 'lang': 'da-DK',
+         'meta': {'display_name': 'Mads', 'offline': False, 'gender': 'male', 'priority': 40}}], 'cy-GB': [
+        {'voice': 'Gwyneth', 'lang': 'cy-GB',
+         'meta': {'display_name': 'Gwyneth', 'offline': False, 'gender': 'female', 'priority': 40}}], 'cmn-CN': [
+        {'voice': 'Zhiyu', 'lang': 'cmn-CN',
+         'meta': {'display_name': 'Zhiyu', 'offline': False, 'gender': 'female', 'priority': 40}}], 'arb': [
+        {'voice': 'Zeina', 'lang': 'arb',
+         'meta': {'display_name': 'Zeina', 'offline': False, 'gender': 'female', 'priority': 40}}], 'ca-ES': [
+        {'voice': 'Arlet', 'lang': 'ca-ES',
+         'meta': {'display_name': 'Arlet', 'offline': False, 'gender': 'female', 'priority': 40}}], 'de-AT': [
+        {'voice': 'Hannah', 'lang': 'de-AT',
+         'meta': {'display_name': 'Hannah', 'offline': False, 'gender': 'female', 'priority': 40}}]}
+
+# add UI settings meta, same scheme skill settings uses for selene
+# this plugin requires setup of API keys
+for lang, opts in PollyTTSPluginConfig.items():
+    for idx, config in enumerate(opts):
+        s = {"key_id": "",
+             "secret_key": "",
+             "region": "us-east-1"}
+        PollyTTSPluginConfig[lang][idx]["meta"]["extra_setup"] = settings2meta(s, "Polly TTS")
 
 
 if __name__ == "__main__":
