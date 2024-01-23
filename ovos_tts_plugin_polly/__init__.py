@@ -1,7 +1,6 @@
 import logging
-
+import boto3
 from ovos_plugin_manager.templates.tts import TTS, TTSValidator
-from ovos_utils.skills.settings import settings2meta
 
 logging.getLogger('botocore').setLevel(logging.CRITICAL)
 logging.getLogger('boto3').setLevel(logging.CRITICAL)
@@ -15,7 +14,6 @@ class PollyTTS(TTS):
                      "amazon:auto-breaths", "p", "s", "amazon:effect", "mark"]
         super().__init__(*args, **kwargs, audio_ext="mp3",
                          ssml_tags=ssml_tags, validator=PollyTTSValidator(self))
-        import boto3
         # Catch Chinese alt code
         if self.lang.lower() == "zh-zh":
             self.lang = "cmn-cn"
@@ -232,14 +230,6 @@ PollyTTSPluginConfig = {
         {'voice': 'Hannah', 'lang': 'de-AT',
          'meta': {'display_name': 'Hannah', 'offline': False, 'gender': 'female', 'priority': 40}}]}
 
-# add UI settings meta, same scheme skill settings uses for selene
-# this plugin requires setup of API keys
-for lang, opts in PollyTTSPluginConfig.items():
-    for idx, config in enumerate(opts):
-        s = {"key_id": "",
-             "secret_key": "",
-             "region": "us-east-1"}
-        PollyTTSPluginConfig[lang][idx]["meta"]["extra_setup"] = settings2meta(s, "Polly TTS")
 
 
 if __name__ == "__main__":
