@@ -12,7 +12,7 @@ jobs:
     secrets: inherit
     with:
       branch: 'dev'
-      version_file: 'ovos_backend_client/version.py'
+      version_file: 'ovos_tts_plugin_polly/version.py'
       setup_py: 'setup.py'
       update_changelog: true
       publish_prerelease: true
