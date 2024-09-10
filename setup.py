@@ -6,11 +6,13 @@ from setuptools import setup
 PLUGIN_ENTRY_POINT = 'ovos-tts-plugin-polly = ovos_tts_plugin_polly:PollyTTS'
 SAMPLE_CONFIGS = 'ovos-tts-plugin-polly.config = ovos_tts_plugin_polly:PollyTTSPluginConfig'
 
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
+
 
 def get_version():
     """ Find the version of the package"""
-    version = None
-    version_file = os.path.join('ovos_tts_plugin_polly', 'version.py')
+    version_file = f'{BASEDIR}/ovos_tts_plugin_polly/version.py'
+
     print(f"ERROR: version file: {version_file}")
     major, minor, build, alpha = (None, None, None, None)
     with open(version_file) as f:
