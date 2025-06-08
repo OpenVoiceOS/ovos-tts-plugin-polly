@@ -1,6 +1,7 @@
-import logging
 import boto3
+import logging
 from ovos_plugin_manager.templates.tts import TTS, TTSValidator
+from ovos_utils import classproperty
 
 logging.getLogger("botocore").setLevel(logging.CRITICAL)
 logging.getLogger("boto3").setLevel(logging.CRITICAL)
@@ -40,10 +41,10 @@ class PollyTTS(TTS):
 
         self.voice = self.config.get("voice", "Matthew")
         self.key_id = (
-            self.config.get("key_id") or self.config.get("access_key_id") or ""
+                self.config.get("key_id") or self.config.get("access_key_id") or ""
         )
         self.key = (
-            self.config.get("secret_key") or self.config.get("secret_access_key") or ""
+                self.config.get("secret_key") or self.config.get("secret_access_key") or ""
         )
         self.region = self.config.get("region", "us-east-1")
         self.engine = self.config.get("engine", "standard")
@@ -91,6 +92,16 @@ class PollyTTS(TTS):
         voices = self.polly.describe_voices(LanguageCode=language_code)
 
         return voices
+
+    @classproperty
+    def available_languages(cls) -> set:
+        """Return languages supported by this TTS implementation in this state
+        This property should be overridden by the derived class to advertise
+        what languages that engine supports.
+        Returns:
+            set: supported languages
+        """
+        return set(PollyTTSPluginConfig.keys())
 
 
 class PollyTTSValidator(TTSValidator):
@@ -981,7 +992,6 @@ PollyTTSPluginConfig = {
         }
     ],
 }
-
 
 if __name__ == "__main__":
     e = PollyTTS(config={"key_id": "", "secret_key": ""})
