@@ -1,18 +1,12 @@
 # Changelog
 
-## [0.2.1a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.1a1) (2024-09-10)
+## [0.2.2a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.2a1) (2025-06-08)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/affd8d609fdb2cfc284744faa55d6cea8b7d5532...0.2.1a1)
-
-**Implemented enhancements:**
-
-- Add engine option and missing voices [\#3](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/3) ([goldyfruit](https://github.com/goldyfruit))
-- feat/plugin\_configs [\#1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/1) ([NeonJarbas](https://github.com/NeonJarbas))
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.1...0.2.2a1)
 
 **Merged pull requests:**
 
-- Update release\_workflow.yml [\#5](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/5) ([JarbasAl](https://github.com/JarbasAl))
-- Update version.py [\#4](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/4) ([JarbasAl](https://github.com/JarbasAl))
+- fix: compatibility with ovos-plugin-manager 1.X.X [\#7](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/7) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
