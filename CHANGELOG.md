@@ -1,12 +1,16 @@
 # Changelog
 
-## [0.2.2a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.2a1) (2025-06-08)
+## [0.2.3a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.3a1) (2025-12-18)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.1...0.2.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.2...0.2.3a1)
+
+**Fixed bugs:**
+
+- Invalid SSML request [\#2](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/issues/2)
 
 **Merged pull requests:**
 
-- fix: compatibility with ovos-plugin-manager 1.X.X [\#7](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/7) ([JarbasAl](https://github.com/JarbasAl))
+- chore: Configure Renovate [\#9](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/9) ([renovate[bot]](https://github.com/apps/renovate))
 
 
 
