@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.3a4](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.3a4) (2026-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.3a3...0.2.3a4)
+
+**Merged pull requests:**
+
+- chore: add missing shared CI workflows [\#17](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/17) ([JarbasAl](https://github.com/JarbasAl))
+- Create README.md [\#16](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/16) ([acegiak](https://github.com/acegiak))
+
 ## [0.2.3a3](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.3a3) (2025-12-19)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.3a2...0.2.3a3)
@@ -19,10 +28,6 @@
 ## [0.2.3a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.3a1) (2025-12-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.2...0.2.3a1)
-
-**Fixed bugs:**
-
-- Invalid SSML request [\#2](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/issues/2)
 
 **Merged pull requests:**
 
