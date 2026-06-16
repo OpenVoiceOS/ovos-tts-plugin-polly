@@ -41,6 +41,6 @@ def test_tts_intelligibility():
     if not _has_aws_credentials():
         pytest.skip("requires AWS credentials")
     tts = PollyTTS()
-    report = score_tts_intelligibility(tts, PHRASES, lang=LANG)
+    report = score_tts_intelligibility(tts, PHRASES, lang=LANG, mode="direct")
     print("::TTS-INTELLIGIBILITY:: " + json.dumps(report.to_dict()))
     assert report.mean_wer <= float(os.environ.get("TTS_MAX_WER", "1.0"))
