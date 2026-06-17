@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ovos-tts-plugin-polly"
+dynamic = ["version"]
+description = "polly tts plugin for OpenVoiceOS mycroft neon chatterbox"
+license = "Apache-2.0"
+authors = [
+    {name = "JarbasAi", email = "jarbasai@mailfence.com"}
+]
+keywords = ["OpenVoiceOS", "mycroft", "neon", "chatterbox", "plugin", "tts"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Text Processing :: Linguistic",
+    "Programming Language :: Python :: 3"
+]
+dependencies = [
+    "boto3",
+    "ovos-plugin-manager>=2.1.0,<3.0.0"
+]
+
+[project.optional-dependencies]
+test = [
+    "ovoscope[tts]",
+    "pytest"
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenVoiceOS/ovos-tts-plugin-polly"
+
+[project.entry-points."opm.tts"]
+"ovos-tts-plugin-polly" = "ovos_tts_plugin_polly:PollyTTS"
+
+[project.entry-points."opm.tts.config"]
+"ovos-tts-plugin-polly.config" = "ovos_tts_plugin_polly:PollyTTSPluginConfig"
+
+[tool.setuptools.dynamic]
+version = {attr = "ovos_tts_plugin_polly.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ovos_tts_plugin_polly*"]
+
+[tool.setuptools.package-data]
+ovos_tts_plugin_polly = ["*.json"]
