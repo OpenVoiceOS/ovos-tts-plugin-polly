@@ -37,9 +37,15 @@ def _has_aws_credentials() -> bool:
         return False
 
 
+# Polly is a cloud engine and needs AWS credentials. A missing secret is NOT a
+# failure: skip cleanly when no credentials are resolvable.
+pytestmark = pytest.mark.skipif(
+    not _has_aws_credentials(),
+    reason="AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY not set — cloud engine, cannot synthesize in CI",
+)
+
+
 def test_tts_intelligibility():
-    if not _has_aws_credentials():
-        pytest.skip("requires AWS credentials")
     tts = PollyTTS()
     report = score_tts_intelligibility(tts, PHRASES, lang=LANG, mode="direct")
     print("::TTS-INTELLIGIBILITY:: " + json.dumps(report.to_dict()))
