@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.0a1) (2026-07-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.4a1...0.3.0a1)
+
+**Merged pull requests:**
+
+- feat: add ovos-tts-server docker image [\#22](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/22) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.2.4a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.2.4a1) (2026-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.2.3a4...0.2.4a1)
