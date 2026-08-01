@@ -1,0 +1,35 @@
+services:
+  polly-tts:
+    image: ghcr.io/openvoiceos/ovos-tts-plugin-polly:dev
+    # …or build locally: build: .
+    container_name: polly-tts
+    restart: unless-stopped
+    ports:
+      - "9666:9666"
+    # Amazon Polly is a CLOUD engine: the image ships with NO credentials, so you
+    # MUST supply AWS credentials at runtime. The plugin reads them from its
+    # config block (NOT from AWS_* env vars, which it does not consult), so the
+    # reliable path is to mount a mycroft.conf that carries the polly config:
+    #
+    #   {
+    #     "tts": {
+    #       "module": "ovos-tts-plugin-polly",
+    #       "ovos-tts-plugin-polly": {
+    #         "access_key_id": "AKIA...",        # or "key_id"
+    #         "secret_access_key": "....",       # or "secret_key"
+    #         "region": "us-east-1",
+    #         "voice": "Joanna",
+    #         "engine": "neural"                 # or "standard"
+    #       }
+    #     }
+    #   }
+    #
+    # Uncomment and point at your own file (keep it OUT of git):
+    # volumes:
+    #   - ./mycroft.conf:/home/ovos/.config/mycroft/mycroft.conf:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9666/status')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
