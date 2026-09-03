@@ -8,7 +8,7 @@
 # mounted mycroft.conf (see README "Docker" section); without them every request
 # fails with an AWS auth error. Network access to the AWS Polly endpoint is
 # required (this is not an offline/air-gapped voice).
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # ffmpeg: the Polly plugin emits mp3; ovos-tts-server transcodes non-WAV plugin
 # output to WAV.
