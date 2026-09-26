@@ -6,6 +6,7 @@ from ovos_tts_plugin_polly import PollyTTS
 
 @pytest.fixture
 def plugin(monkeypatch):
+    """Provide a Polly plugin with an AWS stub that rejects unexpected network requests."""
     client = boto3.client('polly', region_name='us-east-1',
                           aws_access_key_id='testing', aws_secret_access_key='testing')
     monkeypatch.setattr('boto3.Session.client', lambda *a, **k: client)
@@ -16,6 +17,7 @@ def plugin(monkeypatch):
 
 
 def voices(stub, lang='fr-CA', ids=('Gabrielle', 'Liam'), **extra):
+    """Queue an engine-filtered voice catalog response for synthesis tests."""
     params = dict(Engine='neural', IncludeAdditionalLanguageCodes=True)
     if lang:
         params['LanguageCode'] = lang
