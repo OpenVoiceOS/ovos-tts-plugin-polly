@@ -139,3 +139,34 @@ before adjusting these values; larger pools do not raise AWS service quotas.
 Without explicit keys the normal AWS credential provider chain is used, including
 environment variables and workload roles. Optional `profile_name` and `session_token`
 are supported. Never put credentials in committed configuration files.
+
+## Optional bidirectional text/audio streaming
+
+AWS's Python SDK does not support `StartSpeechSynthesisStream`. The optional local
+Node.js helper uses the official JavaScript SDK and HTTP/2. It requires Node 22+
+and installation of its pinned dependencies:
+
+```bash
+cd "$(python -c 'import pathlib, ovos_tts_plugin_polly; print(pathlib.Path(ovos_tts_plugin_polly.__file__).parent / "bridge")')"
+npm ci --ignore-scripts
+```
+
+Configure `engine: generative` and a voice available in your region. Grant
+`polly:StartSpeechSynthesisStream` as well as the discovery permission. Consume
+`tts.stream_text(async_text_chunks, lang="en-US")` as an async iterator of audio
+bytes. Each input item is a nonempty plain-text string; preserve spaces between
+chunks. Audio arrives concurrently with input. PCM output here is raw 16-bit mono,
+whereas `stream_tts()` wraps it in WAV. No speech marks or audio caching are applied
+to incremental text sessions. This API is for applications supplying incremental
+text; the regular OVOS speech path uses `stream_tts()`.
+
+The helper uses the standard AWS credential chain; explicit plugin credentials
+and profile settings are passed privately through the child environment.
+`bidirectional_command` can select an installed helper using an argv list, without
+a shell. `bidirectional_timeout` (default 30 seconds) bounds output inactivity and
+helper shutdown; tune it for gaps in your text producer. Cancellation stops the
+producer and reaps the child. Requests are never automatically replayed.
+
+See [AWS's streaming documentation](https://docs.aws.amazon.com/polly/latest/dg/bidirectional-streaming.html)
+for engine/region availability. The helper is tested with simulated SDK event streams;
+real AWS interoperability and audible latency must be measured in your environment.

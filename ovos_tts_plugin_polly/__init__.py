@@ -291,6 +291,16 @@ class PollyTTS(StreamingTTS):
             kwargs.update(ctxt.synth_kwargs)
         return super()._execute(sentence, ident, listen, **kwargs)
 
+    async def stream_text(self, text_chunks, lang=None, voice=None):
+        """Bidirectional plain-text input and raw audio output via optional Node SDK."""
+        from .bidirectional import stream_text
+        chunks = stream_text(self, text_chunks, lang, voice)
+        try:
+            async for chunk in chunks:
+                yield chunk
+        finally:
+            await chunks.aclose()
+
     def get_speech_marks(self, sentence, lang=None, voice=None,
                          mark_types=("sentence", "word", "viseme")):
         """Return Polly timing metadata separately from OVOS phoneme data."""
