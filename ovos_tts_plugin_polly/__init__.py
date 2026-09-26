@@ -122,7 +122,9 @@ class PollyTTS(TTS):
         sentence = re.sub(r"<whispered\s*>",
                           '<amazon:effect name="whispered">', sentence)
         sentence = re.sub(r"</whispered\s*>", "</amazon:effect>", sentence)
-        text_type = "ssml" if re.search(r"<[/A-Za-z][^>]*>", sentence) else "text"
+        tags = (r"(?:speak|say-as|voice|prosody|break|emphasis|sub|lang|phoneme|w|p|s|mark|"
+                r"amazon:(?:auto-breaths|effect|domain))")
+        text_type = "ssml" if re.search(rf"</?{tags}(?:\s[^>]*)?/?>", sentence) else "text"
         if text_type == "ssml" and not re.search(r"<speak(?:\s|>)", sentence):
             sentence = f"<speak>{sentence}</speak>"
         return sentence, text_type

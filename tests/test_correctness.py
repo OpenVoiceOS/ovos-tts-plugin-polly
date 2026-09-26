@@ -59,3 +59,8 @@ def test_plain_text():
 @pytest.mark.parametrize('lang,expected', [('arb', 'arb'), ('en-gb-wls', 'en-GB-WLS'), ('zh-zh', 'cmn-CN')])
 def test_language_codes(lang, expected):
     assert PollyTTS._language_code(lang) == expected
+
+
+@pytest.mark.parametrize('text', ['Mail Tom <tom@example.com>', 'if a <b and c> d', '<server> is down'])
+def test_angle_brackets_in_plain_text(text):
+    assert PollyTTS._prepare_text(text) == (text, 'text')
