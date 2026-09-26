@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0a3](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.0a3) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.0a2...0.3.0a3)
+
+**Merged pull requests:**
+
+- Update actions/checkout action to v7 [\#24](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/24) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.3.0a2](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.0a2) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.0a1...0.3.0a2)
