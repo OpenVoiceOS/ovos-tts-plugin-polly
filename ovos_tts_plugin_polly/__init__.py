@@ -1,20 +1,22 @@
-import boto3
-from botocore.config import Config
 import asyncio
-import os
-import struct
-import tempfile
 import copy
 import hashlib
 import json
-import wave
+import os
 import re
+import struct
+import tempfile
 import threading
 import time
+import wave
 from contextlib import closing
+
+import boto3
+from botocore.config import Config
 from ovos_plugin_manager.templates.tts import StreamingTTS, TTSValidator
-from ovos_utils import classproperty
 from ovos_plugin_manager.utils.tts_cache import hash_sentence
+from ovos_utils import classproperty
+
 
 class PollyTTS(StreamingTTS):
     def __init__(self, *args, **kwargs):
@@ -224,15 +226,28 @@ class PollyTTS(StreamingTTS):
     async def stream_tts(self, sentence, lang=None, voice=None):
         """Yield encoded audio with backpressure; boto3 never blocks the event loop."""
         request = await asyncio.to_thread(self._synthesis_request, sentence, lang, voice)
-        pending = asyncio.create_task(asyncio.to_thread(self.polly.synthesize_speech, **request))
+        response_lock = threading.Lock()
+        cancelled = threading.Event()
+        received = {}
+
+        def send_request():
+            result = self.polly.synthesize_speech(**request)
+            with response_lock:
+                if cancelled.is_set():
+                    result["AudioStream"].close()
+                else:
+                    received["response"] = result
+            return result
+
         try:
-            response = await asyncio.shield(pending)
+            response = await asyncio.to_thread(send_request)
         except asyncio.CancelledError:
-            # A thread cannot be cancelled. Close a response that arrives later.
-            def close_late_response(task):
-                if not task.cancelled() and task.exception() is None:
-                    task.result()["AudioStream"].close()
-            pending.add_done_callback(close_late_response)
+            # Cleanup belongs to the worker too: the event loop may already be
+            # shutting down when an uncancellable network request completes.
+            with response_lock:
+                cancelled.set()
+                if "response" in received:
+                    received["response"]["AudioStream"].close()
             raise
         stream = response["AudioStream"]
         try:
