@@ -1,0 +1,10 @@
+[
+  {"id":"en-status","lang":"en-US","text":"All services are healthy. The backup completed successfully."},
+  {"id":"en-numbers","lang":"en-US","text":"CPU usage is 87 percent. The temperature is 21.5 degrees Celsius."},
+  {"id":"en-identifiers","lang":"en-US","text":"Check PostgreSQL, Kubernetes, and the API on 192.168.1.10."},
+  {"id":"en-date","lang":"en-US","text":"The next maintenance window is September 26, 2026, at 8:30 PM."},
+  {"id":"fr-status","lang":"fr-CA","text":"Tous les services fonctionnent. La sauvegarde est terminée."},
+  {"id":"fr-numbers","lang":"fr-CA","text":"Le processeur est utilisé à 87 pour cent. La température est de 21,5 degrés Celsius."},
+  {"id":"fr-identifiers","lang":"fr-CA","text":"Vérifiez PostgreSQL, Kubernetes et l’API à l’adresse 192.168.1.10."},
+  {"id":"fr-date","lang":"fr-CA","text":"La prochaine maintenance aura lieu le 26 septembre 2026 à 20 h 30."}
+]

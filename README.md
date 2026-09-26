@@ -170,3 +170,10 @@ producer and reaps the child. Requests are never automatically replayed.
 See [AWS's streaming documentation](https://docs.aws.amazon.com/polly/latest/dg/bidirectional-streaming.html)
 for engine/region availability. The helper is tested with simulated SDK event streams;
 real AWS interoperability and audible latency must be measured in your environment.
+
+## Benchmarks and listening tests
+
+See [the benchmark guide](benchmarks/README.md) for an isolated simulation, opt-in
+live p50/p95 measurements, concurrency comparisons, and an English/Canadian French
+listening corpus. The harness measures first audio byte separately from complete
+synthesis and cached responses; audible playback latency needs a loopback measurement.
