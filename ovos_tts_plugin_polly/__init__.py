@@ -19,7 +19,9 @@ from ovos_utils import classproperty
 
 
 class PollyTTS(StreamingTTS):
+    """Adapt Amazon Polly synthesis and voice discovery to the OVOS TTS contract."""
     def __init__(self, *args, **kwargs):
+        """Initialize the OVOS adapter and a reusable regional Polly client."""
         ssml_tags = [
             "speak",
             "say-as",
@@ -109,6 +111,7 @@ class PollyTTS(StreamingTTS):
 
     @staticmethod
     def _language_code(lang):
+        """Normalize OVOS language aliases and casing for the Polly API."""
         if not lang:
             return None
         aliases = {"zh-zh": "cmn-CN", "zh-cn": "cmn-CN"}
@@ -141,6 +144,7 @@ class PollyTTS(StreamingTTS):
             return copy.deepcopy(result)
 
     def _resolve_voice(self, lang=None, voice=None):
+        """Select a compatible regional voice or reject an explicit incompatible choice."""
         lang = self._language_code(lang or self.config.get("lang"))
         voices = self.describe_voices(lang)["Voices"]
         requested = voice or self.config.get("voices", {}).get(lang) or self.voice
@@ -156,6 +160,7 @@ class PollyTTS(StreamingTTS):
         return sorted(voices, key=lambda v: v["Id"])[0]["Id"], lang
 
     def _get_ctxt(self, kwargs=None):
+        """Resolve the effective voice and language before OVOS chooses an audio cache."""
         ctxt = super()._get_ctxt(dict(kwargs or {}))
         # OVOS injects the configured voice; distinguish it from a caller override.
         voice, lang = self._resolve_voice(
@@ -171,6 +176,7 @@ class PollyTTS(StreamingTTS):
     @staticmethod
     def _prepare_text(sentence):
         # Translate only legacy tags, never ordinary words or attribute values.
+        """Preserve plain text and AWS SSML while translating legacy whisper tags."""
         sentence = re.sub(r"<whispered\s*>",
                           '<amazon:effect name="whispered">', sentence)
         sentence = re.sub(r"</whispered\s*>", "</amazon:effect>", sentence)
@@ -182,6 +188,7 @@ class PollyTTS(StreamingTTS):
         return sentence, text_type
 
     def _synthesis_request(self, sentence, lang=None, voice=None):
+        """Build a Polly request with validated voice selection and prepared text."""
         voice, lang = self._resolve_voice(lang, voice)
         sentence, text_type = self._prepare_text(sentence)
         request = dict(OutputFormat=self.output_format, Text=sentence,
@@ -202,6 +209,7 @@ class PollyTTS(StreamingTTS):
         return path
 
     def get_tts(self, sentence, wav_file, lang=None, voice=None):
+        """Write synthesized audio to the supplied path and return the OVOS file tuple."""
         response = self.polly.synthesize_speech(
             **self._synthesis_request(sentence, lang, voice))
         path = None
@@ -348,15 +356,19 @@ class PollyTTS(StreamingTTS):
 
 
 class PollyTTSValidator(TTSValidator):
+    """Validate local dependencies and language support without synthesizing audio."""
     def __init__(self, tts):
+        """Bind validation to the configured Polly TTS instance."""
         super(PollyTTSValidator, self).__init__(tts)
 
     def validate_lang(self):
+        """Reject languages absent from the installed SDK service model."""
         lang = self.tts._language_code(self.tts.lang)
         if lang not in self.tts.available_languages:
             raise ValueError(f"Unsupported Polly language: {lang}")
 
     def validate_dependencies(self):
+        """Report an actionable error when the boto3 dependency is unavailable."""
         try:
             from importlib.util import find_spec
             if find_spec("boto3") is None:
@@ -367,6 +379,7 @@ class PollyTTSValidator(TTSValidator):
             ) from exc
 
     def get_tts_class(self):
+        """Return the plugin class expected by the OVOS validator interface."""
         return PollyTTS
 
 
