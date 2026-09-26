@@ -1,5 +1,8 @@
 import boto3
 import copy
+import hashlib
+import json
+import wave
 import re
 import threading
 import time
@@ -51,6 +54,28 @@ class PollyTTS(TTS):
         self.engine = self.config.get("engine", "standard")
         if self.engine not in {"standard", "neural", "long-form", "generative"}:
             raise ValueError(f"Unsupported Polly engine: {self.engine}")
+        self.output_format = self.config.get("output_format", "mp3")
+        extensions = {"mp3": "mp3", "ogg_vorbis": "ogg", "ogg_opus": "opus",
+                      "pcm": "wav", "mulaw": "ul", "alaw": "al"}
+        if self.output_format not in extensions:
+            raise ValueError(f"Unsupported audio output_format: {self.output_format}")
+        self.audio_ext = extensions[self.output_format]
+        self.sample_rate = str(self.config.get("sample_rate") or (
+            "16000" if self.output_format == "pcm" else
+            "48000" if self.output_format == "ogg_opus" else
+            "8000" if self.output_format in {"mulaw", "alaw"} else
+            "22050" if self.engine == "standard" else "24000"))
+        valid_rates = ({"8000", "16000"} if self.output_format == "pcm" else
+                       {"48000"} if self.output_format == "ogg_opus" else
+                       {"8000"} if self.output_format in {"mulaw", "alaw"} else
+                       {"8000", "16000", "22050", "24000", "44100", "48000"})
+        if self.sample_rate not in valid_rates:
+            raise ValueError(f"Invalid sample_rate for {self.output_format}")
+        self.lexicon_names = self.config.get("lexicon_names", [])
+        if (not isinstance(self.lexicon_names, list) or len(self.lexicon_names) > 5
+                or any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z0-9]{1,20}", n)
+                       for n in self.lexicon_names)):
+            raise ValueError("lexicon_names must contain at most five Polly lexicon names")
         self._voices_cache = {}
         self._voices_lock = threading.Lock()
         self.polly = boto3.Session(
@@ -114,6 +139,10 @@ class PollyTTS(TTS):
             ctxt.lang, (kwargs or {}).get("voice"))
         ctxt.voice = voice
         ctxt.synth_kwargs.update(voice=voice, lang=lang)
+        settings = [self.region, self.engine, self.output_format,
+                    self.sample_rate, self.lexicon_names]
+        fingerprint = hashlib.sha256(json.dumps(settings).encode()).hexdigest()[:16]
+        ctxt.plugin_id = f"{ctxt.plugin_id}/{fingerprint}"
         return ctxt
 
     @staticmethod
@@ -130,8 +159,11 @@ class PollyTTS(TTS):
     def _synthesis_request(self, sentence, lang=None, voice=None):
         voice, lang = self._resolve_voice(lang, voice)
         sentence, text_type = self._prepare_text(sentence)
-        request = dict(OutputFormat=self.audio_ext, Text=sentence,
+        request = dict(OutputFormat=self.output_format, Text=sentence,
                        Engine=self.engine, TextType=text_type, VoiceId=voice)
+        request["SampleRate"] = self.sample_rate
+        if self.lexicon_names:
+            request["LexiconNames"] = list(self.lexicon_names)
         if lang:
             request["LanguageCode"] = lang
         return request
@@ -140,10 +172,31 @@ class PollyTTS(TTS):
         response = self.polly.synthesize_speech(
             **self._synthesis_request(sentence, lang, voice))
         with closing(response["AudioStream"]) as stream:
-            with open(wav_file, "wb") as audio:
-                for chunk in stream.iter_chunks(chunk_size=4096):
-                    audio.write(chunk)
+            if self.output_format == "pcm":
+                with wave.open(str(wav_file), "wb") as audio:
+                    audio.setparams((1, 2, int(self.sample_rate), 0, "NONE", "not compressed"))
+                    for chunk in stream.iter_chunks(chunk_size=4096):
+                        audio.writeframesraw(chunk)
+            else:
+                with open(wav_file, "wb") as audio:
+                    for chunk in stream.iter_chunks(chunk_size=4096):
+                        audio.write(chunk)
         return wav_file, None
+
+    def get_speech_marks(self, sentence, lang=None, voice=None,
+                         mark_types=("sentence", "word", "viseme")):
+        """Return Polly timing metadata separately from OVOS phoneme data."""
+        if self.engine not in {"standard", "neural"}:
+            raise ValueError("Speech marks require the standard or neural engine")
+        if (not mark_types or isinstance(mark_types, str) or
+                not set(mark_types) <= {"sentence", "word", "viseme", "ssml"}):
+            raise ValueError("Invalid speech mark types")
+        request = self._synthesis_request(sentence, lang, voice)
+        request.update(OutputFormat="json", SpeechMarkTypes=list(mark_types))
+        request.pop("SampleRate", None)
+        response = self.polly.synthesize_speech(**request)
+        with closing(response["AudioStream"]) as stream:
+            return [json.loads(line) for line in stream.iter_lines() if line]
 
     @classproperty
     def available_languages(cls) -> set:
