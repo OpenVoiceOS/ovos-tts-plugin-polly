@@ -1,4 +1,9 @@
 import boto3
+from botocore.config import Config
+import asyncio
+import os
+import struct
+import tempfile
 import copy
 import hashlib
 import json
@@ -7,10 +12,11 @@ import re
 import threading
 import time
 from contextlib import closing
-from ovos_plugin_manager.templates.tts import TTS, TTSValidator
+from ovos_plugin_manager.templates.tts import StreamingTTS, TTSValidator
 from ovos_utils import classproperty
+from ovos_plugin_manager.utils.tts_cache import hash_sentence
 
-class PollyTTS(TTS):
+class PollyTTS(StreamingTTS):
     def __init__(self, *args, **kwargs):
         ssml_tags = [
             "speak",
@@ -78,11 +84,26 @@ class PollyTTS(TTS):
             raise ValueError("lexicon_names must contain at most five Polly lexicon names")
         self._voices_cache = {}
         self._voices_lock = threading.Lock()
-        self.polly = boto3.Session(
-            aws_access_key_id=self.key_id,
-            aws_secret_access_key=self.key,
-            region_name=self.region,
-        ).client("polly")
+        session_kwargs = {"region_name": self.region}
+        if bool(self.key_id) != bool(self.key):
+            raise ValueError("Provide both AWS access key ID and secret key")
+        if self.key_id:
+            session_kwargs.update(aws_access_key_id=self.key_id,
+                                  aws_secret_access_key=self.key)
+            if self.config.get("session_token"):
+                session_kwargs["aws_session_token"] = self.config["session_token"]
+        if self.config.get("profile_name"):
+            session_kwargs["profile_name"] = self.config["profile_name"]
+        self.chunk_size = int(self.config.get("chunk_size", 4096))
+        if not 256 <= self.chunk_size <= 1048576:
+            raise ValueError("chunk_size must be between 256 and 1048576 bytes")
+        self.polly = boto3.Session(**session_kwargs).client("polly", config=Config(
+            connect_timeout=float(self.config.get("connect_timeout", 5)),
+            read_timeout=float(self.config.get("read_timeout", 30)),
+            max_pool_connections=int(self.config.get("max_pool_connections", 10)),
+            tcp_keepalive=True,
+            retries={"mode": "standard", "total_max_attempts":
+                     int(self.config.get("max_attempts", 3))}))
 
     @staticmethod
     def _language_code(lang):
@@ -168,20 +189,107 @@ class PollyTTS(TTS):
             request["LanguageCode"] = lang
         return request
 
+    @staticmethod
+    def _temporary_audio(wav_file):
+        directory = os.path.dirname(os.path.abspath(wav_file))
+        os.makedirs(directory, exist_ok=True)
+        fd, path = tempfile.mkstemp(prefix=".polly-", dir=directory)
+        os.close(fd)
+        return path
+
     def get_tts(self, sentence, wav_file, lang=None, voice=None):
         response = self.polly.synthesize_speech(
             **self._synthesis_request(sentence, lang, voice))
-        with closing(response["AudioStream"]) as stream:
-            if self.output_format == "pcm":
-                with wave.open(str(wav_file), "wb") as audio:
-                    audio.setparams((1, 2, int(self.sample_rate), 0, "NONE", "not compressed"))
-                    for chunk in stream.iter_chunks(chunk_size=4096):
-                        audio.writeframesraw(chunk)
-            else:
-                with open(wav_file, "wb") as audio:
-                    for chunk in stream.iter_chunks(chunk_size=4096):
-                        audio.write(chunk)
+        path = None
+        try:
+            with closing(response["AudioStream"]) as stream:
+                path = self._temporary_audio(wav_file)
+                if self.output_format == "pcm":
+                    with wave.open(path, "wb") as audio:
+                        audio.setparams((1, 2, int(self.sample_rate), 0, "NONE", "not compressed"))
+                        for chunk in stream.iter_chunks(chunk_size=self.chunk_size):
+                            audio.writeframesraw(chunk)
+                else:
+                    with open(path, "wb") as audio:
+                        for chunk in stream.iter_chunks(chunk_size=self.chunk_size):
+                            audio.write(chunk)
+            os.replace(path, wav_file)
+        finally:
+            if path and os.path.exists(path):
+                os.unlink(path)
         return wav_file, None
+
+    async def stream_tts(self, sentence, lang=None, voice=None):
+        """Yield encoded audio with backpressure; boto3 never blocks the event loop."""
+        request = await asyncio.to_thread(self._synthesis_request, sentence, lang, voice)
+        pending = asyncio.create_task(asyncio.to_thread(self.polly.synthesize_speech, **request))
+        try:
+            response = await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            # A thread cannot be cancelled. Close a response that arrives later.
+            def close_late_response(task):
+                if not task.cancelled() and task.exception() is None:
+                    task.result()["AudioStream"].close()
+            pending.add_done_callback(close_late_response)
+            raise
+        stream = response["AudioStream"]
+        try:
+            if self.output_format == "pcm":
+                # Unknown-length WAV header for pipe playback; repaired on disk.
+                rate = int(self.sample_rate)
+                yield struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 0xFFFFFFFF,
+                                  b"WAVE", b"fmt ", 16, 1, 1, rate, rate * 2,
+                                  2, 16, b"data", 0xFFFFFFFF)
+            while True:
+                chunk = await asyncio.to_thread(stream.read, self.chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            stream.close()
+
+    async def generate_audio(self, sentence, wav_file, play_streaming=True,
+                             listen=False, message=None, plugin_kwargs=None):
+        kwargs = plugin_kwargs or {}
+        path = self._temporary_audio(wav_file)
+        started = False
+        chunks = self.stream_tts(sentence, **kwargs)
+        try:
+            if play_streaming:
+                self.callbacks.stream_start(message)
+                started = True
+            with open(path, "wb") as audio:
+                async for chunk in chunks:
+                    audio.write(chunk)
+                    if play_streaming:
+                        self.callbacks.stream_chunk(chunk)
+                if self.output_format == "pcm":
+                    length = audio.tell()
+                    audio.seek(4)
+                    audio.write(struct.pack("<I", length - 8))
+                    audio.seek(40)
+                    audio.write(struct.pack("<I", length - 44))
+            os.replace(path, wav_file)
+            if self.enable_cache:
+                ctxt = await asyncio.to_thread(self._get_ctxt, kwargs)
+                cache = ctxt.get_cache(self.audio_ext, self.config)
+                cached_audio = cache.define_audio_file(hash_sentence(sentence))
+                # Only register when the caller provided the OVOS cache path.
+                if os.path.abspath(str(cached_audio)) == os.path.abspath(wav_file):
+                    self._cache_sentence(sentence, ctxt.lang, cached_audio, cache)
+            return wav_file
+        finally:
+            await chunks.aclose()
+            if os.path.exists(path):
+                os.unlink(path)
+            if started:
+                self.callbacks.stream_stop(listen, message)
+
+    def _execute(self, sentence, ident, listen, **kwargs):
+        if self.config.get("enable_streaming"):
+            ctxt = self._get_ctxt(kwargs)
+            kwargs.update(ctxt.synth_kwargs)
+        return super()._execute(sentence, ident, listen, **kwargs)
 
     def get_speech_marks(self, sentence, lang=None, voice=None,
                          mark_types=("sentence", "word", "viseme")):
