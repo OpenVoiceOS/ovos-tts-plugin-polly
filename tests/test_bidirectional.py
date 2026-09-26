@@ -62,3 +62,54 @@ async def test_helper_error_surfaces(plugin, tmp_path):
         yield 'hello'
     with pytest.raises(RuntimeError, match='exit 2'):
         await anext(tts.stream_text(text(), 'en-US'))
+
+
+@pytest.mark.asyncio
+async def test_consumer_close_reaps_helper_and_cancels_producer(plugin, tmp_path, monkeypatch):
+    import ovos_tts_plugin_polly.bidirectional as bridge
+    tts, stub = plugin
+    configure(tts, stub, tmp_path, '''import sys,time
+sys.stdin.readline()
+sys.stdin.readline()
+print('audio',end='',flush=True)
+time.sleep(30)
+''')
+    processes = []
+    original = asyncio.create_subprocess_exec
+    async def capture(*args, **kwargs):
+        process = await original(*args, **kwargs)
+        processes.append(process)
+        return process
+    monkeypatch.setattr(bridge.asyncio, 'create_subprocess_exec', capture)
+    closed = asyncio.Event()
+    async def text():
+        try:
+            yield 'Hello'
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+    chunks = tts.stream_text(text(), 'en-US')
+    assert await anext(chunks) == b'audio'
+    await chunks.aclose()
+    assert closed.is_set()
+    assert processes[0].returncode is not None
+
+
+@pytest.mark.asyncio
+async def test_output_timeout_reaps_helper(plugin, tmp_path, monkeypatch):
+    import ovos_tts_plugin_polly.bidirectional as bridge
+    tts, stub = plugin
+    configure(tts, stub, tmp_path, 'import sys,time; sys.stdin.read(); time.sleep(30)')
+    tts.config['bidirectional_timeout'] = 0.1
+    processes = []
+    original = asyncio.create_subprocess_exec
+    async def capture(*args, **kwargs):
+        process = await original(*args, **kwargs)
+        processes.append(process)
+        return process
+    monkeypatch.setattr(bridge.asyncio, 'create_subprocess_exec', capture)
+    async def text():
+        yield 'Hello'
+    with pytest.raises(asyncio.TimeoutError):
+        await anext(tts.stream_text(text(), 'en-US'))
+    assert processes[0].returncode is not None

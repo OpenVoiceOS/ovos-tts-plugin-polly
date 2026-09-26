@@ -56,3 +56,10 @@ test('unterminated and oversized input are rejected', async () => {
     await assert.rejects(async () => { for await (const _ of lines(Readable.from([Buffer.from(text)]))) void _; });
   }
 });
+
+test('missing terminal event is an incomplete response', async () => {
+  await assert.rejects(run(input({request: {Engine: 'generative'}}), new Writable({write(c,e,cb){cb();}}), () => ({
+    async send() {return {EventStream: (async function* () {yield {AudioEvent: {AudioChunk: Buffer.from('a')}};})()};},
+    destroy() {},
+  })), /without StreamClosedEvent/);
+});
