@@ -131,3 +131,51 @@ async def test_streaming_pcm_saved_with_correct_lengths(plugin, tmp_path):
     with wave.open(path) as audio:
         assert audio.getnframes() == 10
         assert audio.readframes(10) == data
+
+
+@pytest.mark.asyncio
+async def test_completed_stream_is_reused_by_framework_cache(plugin, tmp_path, monkeypatch):
+    from ovos_plugin_manager.templates.tts import TTSContext
+    from ovos_plugin_manager.utils.tts_cache import hash_sentence
+    tts, stub = plugin
+    voices(stub, 'en-US', ('Matthew',))
+    tts.config.update(preloaded_cache=str(tmp_path), persist_cache=False)
+    monkeypatch.setattr('ovos_plugin_manager.utils.tts_cache.get_tmp_cache_dir', lambda *a: str(tmp_path))
+    monkeypatch.setattr(TTSContext, '_caches', {})
+    ctxt = tts._get_ctxt({'lang': 'en-US'})
+    cache = ctxt.get_cache(tts.audio_ext, tts.config)
+    path = str(cache.define_audio_file(hash_sentence('Hello')))
+    stub.add_response('synthesize_speech', {'AudioStream': StreamingBody(io.BytesIO(b'audio'), 5)})
+    await tts.generate_audio('Hello', path, play_streaming=False, plugin_kwargs=ctxt.synth_kwargs)
+    # No AWS response remains: a second synthesis must hit the framework cache.
+    audio, _ = tts.synth('Hello', lang='en-US')
+    assert str(audio) == path
+    assert hash_sentence('Hello') in cache
+
+
+def test_late_response_closed_after_event_loop_shutdown(plugin):
+    tts, stub = plugin
+    voices(stub, 'en-US', ('Matthew',))
+    entered, release = threading.Event(), threading.Event()
+    body = StreamingBody(io.BytesIO(b'audio'), 5)
+    def request(**kwargs):
+        entered.set()
+        release.wait(2)
+        return {'AudioStream': body}
+    tts.polly.synthesize_speech = request
+    async def cancel_request():
+        chunks = tts.stream_tts('Hello', 'en-US')
+        task = asyncio.create_task(anext(chunks))
+        assert await asyncio.to_thread(entered.wait, 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    # asyncio.run closes the loop after cancellation, while the worker is active.
+    timer = threading.Timer(0.1, release.set)
+    timer.start()
+    try:
+        asyncio.run(cancel_request())
+    finally:
+        release.set()
+        timer.join()
+    assert body._raw_stream.closed
