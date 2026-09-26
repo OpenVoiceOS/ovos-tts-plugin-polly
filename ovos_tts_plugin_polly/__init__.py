@@ -1,12 +1,11 @@
 import boto3
-import logging
+import copy
+import re
+import threading
+import time
+from contextlib import closing
 from ovos_plugin_manager.templates.tts import TTS, TTSValidator
 from ovos_utils import classproperty
-
-logging.getLogger("botocore").setLevel(logging.CRITICAL)
-logging.getLogger("boto3").setLevel(logging.CRITICAL)
-logging.getLogger("urllib3.util.retry").setLevel(logging.CRITICAL)
-
 
 class PollyTTS(TTS):
     def __init__(self, *args, **kwargs):
@@ -23,6 +22,8 @@ class PollyTTS(TTS):
             "w",
             "whisper",
             "amazon:auto-breaths",
+            "amazon:domain",
+            "whispered",
             "p",
             "s",
             "amazon:effect",
@@ -48,50 +49,101 @@ class PollyTTS(TTS):
         )
         self.region = self.config.get("region", "us-east-1")
         self.engine = self.config.get("engine", "standard")
+        if self.engine not in {"standard", "neural", "long-form", "generative"}:
+            raise ValueError(f"Unsupported Polly engine: {self.engine}")
+        self._voices_cache = {}
+        self._voices_lock = threading.Lock()
         self.polly = boto3.Session(
             aws_access_key_id=self.key_id,
             aws_secret_access_key=self.key,
             region_name=self.region,
         ).client("polly")
 
-    def get_tts(self, sentence, wav_file, lang=None, voice=None):
+    @staticmethod
+    def _language_code(lang):
+        if not lang:
+            return None
+        aliases = {"zh-zh": "cmn-CN", "zh-cn": "cmn-CN"}
+        lang = lang.replace("_", "-")
+        if lang.lower() in aliases:
+            return aliases[lang.lower()]
+        parts = lang.split("-")
+        return "-".join([parts[0].lower()] + [p.upper() for p in parts[1:]])
+
+    def describe_voices(self, language_code="en-US", engine=None):
+        """Return every page, including bilingual voices, for this region."""
+        params = {"Engine": engine or self.engine,
+                  "IncludeAdditionalLanguageCodes": True}
+        if language_code:
+            params["LanguageCode"] = self._language_code(language_code)
+        key = tuple(sorted(params.items()))
+        with self._voices_lock:
+            cached = self._voices_cache.get(key)
+            if cached and time.monotonic() - cached[0] < 300:
+                return copy.deepcopy(cached[1])
+            voices = []
+            while True:
+                page = self.polly.describe_voices(**params)
+                voices.extend(page.get("Voices", []))
+                if not page.get("NextToken"):
+                    break
+                params["NextToken"] = page["NextToken"]
+            result = {"Voices": voices}
+            self._voices_cache[key] = (time.monotonic(), result)
+            return copy.deepcopy(result)
+
+    def _resolve_voice(self, lang=None, voice=None):
+        lang = self._language_code(lang or self.config.get("lang"))
+        voices = self.describe_voices(lang)["Voices"]
+        requested = voice or self.config.get("voices", {}).get(lang) or self.voice
+        match = next((v for v in voices
+                      if v["Id"].casefold() == requested.casefold()), None)
+        if match:
+            return match["Id"], lang
+        if voice or not lang or self.config.get("voices", {}).get(lang):
+            raise ValueError(f"Voice {requested!r} is unavailable for language "
+                             f"{lang!r}, engine {self.engine!r} in {self.region}")
+        if not voices:
+            raise ValueError(f"No {self.engine} voices for {lang} in {self.region}")
+        return sorted(voices, key=lambda v: v["Id"])[0]["Id"], lang
+
+    def _get_ctxt(self, kwargs=None):
+        ctxt = super()._get_ctxt(dict(kwargs or {}))
+        # OVOS injects the configured voice; distinguish it from a caller override.
+        voice, lang = self._resolve_voice(
+            ctxt.lang, (kwargs or {}).get("voice"))
+        ctxt.voice = voice
+        ctxt.synth_kwargs.update(voice=voice, lang=lang)
+        return ctxt
+
+    @staticmethod
+    def _prepare_text(sentence):
+        # Translate only legacy tags, never ordinary words or attribute values.
+        sentence = re.sub(r"<whispered\s*>",
+                          '<amazon:effect name="whispered">', sentence)
+        sentence = re.sub(r"</whispered\s*>", "</amazon:effect>", sentence)
+        text_type = "ssml" if re.search(r"<[/A-Za-z][^>]*>", sentence) else "text"
+        if text_type == "ssml" and not re.search(r"<speak(?:\s|>)", sentence):
+            sentence = f"<speak>{sentence}</speak>"
+        return sentence, text_type
+
+    def _synthesis_request(self, sentence, lang=None, voice=None):
+        voice, lang = self._resolve_voice(lang, voice)
+        sentence, text_type = self._prepare_text(sentence)
+        request = dict(OutputFormat=self.audio_ext, Text=sentence,
+                       Engine=self.engine, TextType=text_type, VoiceId=voice)
         if lang:
-            if voice:
-                pass
-                # TODO - validate that selected voice matches the lang
-            else:
-                # TODO - get default voice for lang
-                pass
-        voice = voice or self.voice
-        text_type = "text"
-        if self.remove_ssml(sentence) != sentence:
-            text_type = "ssml"
-            sentence = (
-                sentence.replace("\whispered", "/amazon:effect")
-                .replace("\\whispered", "/amazon:effect")
-                .replace("whispered", 'amazon:effect name="whispered"')
-            )
+            request["LanguageCode"] = lang
+        return request
+
+    def get_tts(self, sentence, wav_file, lang=None, voice=None):
         response = self.polly.synthesize_speech(
-            OutputFormat=self.audio_ext,
-            Text=sentence,
-            Engine=self.engine,
-            TextType=text_type,
-            VoiceId=voice.title(),
-        )
-
-        with open(wav_file, "wb") as f:
-            f.write(response["AudioStream"].read())
+            **self._synthesis_request(sentence, lang, voice))
+        with closing(response["AudioStream"]) as stream:
+            with open(wav_file, "wb") as audio:
+                for chunk in stream.iter_chunks(chunk_size=4096):
+                    audio.write(chunk)
         return wav_file, None
-
-    def describe_voices(self, language_code="en-US"):
-        if language_code.islower():
-            a, b = language_code.split("-")
-            b = b.upper()
-            language_code = "-".join([a, b])
-        # example 'it-IT' useful to retrieve voices
-        voices = self.polly.describe_voices(LanguageCode=language_code)
-
-        return voices
 
     @classproperty
     def available_languages(cls) -> set:
@@ -101,7 +153,10 @@ class PollyTTS(TTS):
         Returns:
             set: supported languages
         """
-        return set(PollyTTSPluginConfig.keys())
+        # SDK metadata is available offline and tracks new Polly languages.
+        from botocore.session import get_session
+        model = get_session().get_service_model("polly")
+        return set(model.shape_for("LanguageCode").enum)
 
 
 class PollyTTSValidator(TTSValidator):
@@ -109,12 +164,15 @@ class PollyTTSValidator(TTSValidator):
         super(PollyTTSValidator, self).__init__(tts)
 
     def validate_lang(self):
-        langs = [l.lower() for l in PollyTTSPluginConfig.keys()]
-        assert self.tts.lang.lower() in langs
+        lang = self.tts._language_code(self.tts.lang)
+        if lang not in self.tts.available_languages:
+            raise ValueError(f"Unsupported Polly language: {lang}")
 
     def validate_dependencies(self):
         try:
-            from boto3 import Session
+            from importlib.util import find_spec
+            if find_spec("boto3") is None:
+                raise ImportError("boto3")
         except ImportError as exc:
             raise ImportError(
                 "PollyTTS dependencies not installed, please run pip install boto3"

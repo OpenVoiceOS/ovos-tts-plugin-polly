@@ -33,7 +33,7 @@ The plugin reads these config keys:
 - `secret_access_key` (alias `secret_key`)
 - `region` (default `us-east-1`)
 - `voice` (default `Matthew`)
-- `engine`: `standard` or `neural` (default `standard`)
+- `engine`: `standard`, `neural`, `long-form`, or `generative` (default `standard`)
 
 ## Docker
 
@@ -82,3 +82,20 @@ curl "http://localhost:9666/synthesize/hello%20world" --output hello.wav
 ## License
 
 Apache-2.0
+
+## Language and SSML correctness
+
+Requests select voices from the regional, engine-filtered `DescribeVoices` catalog,
+including bilingual voices and every result page. Grant `polly:DescribeVoices` in
+addition to `polly:SynthesizeSpeech`. Discovery is cached for five minutes.
+An explicit incompatible voice fails before synthesis; otherwise the configured
+voice is preferred, followed by the alphabetically first compatible voice. Set
+`voices` to a language-to-voice mapping (for example `{"fr-CA": "Gabrielle"}`)
+to choose deterministic defaults. `lang` is forwarded as `LanguageCode`.
+
+Standard AWS SSML is preserved. Legacy `<whispered>...</whispered>` is translated
+only at tag boundaries. SSML fragments are wrapped in `<speak>`. Tag support
+varies by engine; AWS remains authoritative for unsupported SSML errors.
+
+Run credential-free regression tests with `pip install -e . pytest pytest-asyncio`
+and `pytest -q`.
