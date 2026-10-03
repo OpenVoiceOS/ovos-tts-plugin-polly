@@ -13,9 +13,30 @@ from contextlib import closing
 
 import boto3
 from botocore.config import Config
-from ovos_plugin_manager.templates.tts import StreamingTTS, TTSValidator
+from ovos_plugin_manager.templates.tts import StreamingTTS, TTSContext, TTSValidator
 from ovos_plugin_manager.utils.tts_cache import hash_sentence
 from ovos_utils import classproperty
+from ovos_utils.lang import standardize_lang_tag
+
+
+class PollyTTSContext(TTSContext):
+    """Keep custom persistent cache roots isolated by the synthesis context."""
+
+    def __init__(self, *, cache_config, **kwargs):
+        """Retain the plugin cache options for callers using the context directly."""
+        super().__init__(**kwargs)
+        self._cache_config = dict(cache_config)
+
+    def get_cache(self, audio_ext="wav", cache_config=None):
+        """Scope custom cache roots without modifying the caller's configuration."""
+        config = dict(self._cache_config if cache_config is None else cache_config)
+        root = config.get("preloaded_cache")
+        if root:
+            namespace = hashlib.sha256(self.tts_id.encode()).hexdigest()
+            config["preloaded_cache"] = os.path.join(
+                os.path.abspath(os.path.expanduser(str(root))), namespace)
+        return super().get_cache(audio_ext, config)
+
 
 
 class PollyTTS(StreamingTTS):
@@ -161,17 +182,29 @@ class PollyTTS(StreamingTTS):
 
     def _get_ctxt(self, kwargs=None):
         """Resolve the effective voice and language before OVOS chooses an audio cache."""
-        ctxt = super()._get_ctxt(dict(kwargs or {}))
+        request = dict(kwargs or {})
+        if not request.get("lang"):
+            request.pop("lang", None)
+        ctxt = super()._get_ctxt(request)
+        # The base context puts request/session language in synth_kwargs, but
+        # falls straight back to the global locale when neither is present.
+        language = (ctxt.synth_kwargs.get("lang") or
+                    self.config.get("lang") or ctxt.lang)
         # OVOS injects the configured voice; distinguish it from a caller override.
         voice, lang = self._resolve_voice(
-            ctxt.lang, (kwargs or {}).get("voice"))
+            language, (kwargs or {}).get("voice"))
+        ctxt.lang = standardize_lang_tag(lang)
         ctxt.voice = voice
         ctxt.synth_kwargs.update(voice=voice, lang=lang)
+        cache_root = self.config.get("preloaded_cache")
+        cache_root = os.path.abspath(os.path.expanduser(str(cache_root))) if cache_root else None
         settings = [self.region, self.engine, self.output_format,
-                    self.sample_rate, self.lexicon_names]
+                    self.sample_rate, self.lexicon_names, cache_root]
         fingerprint = hashlib.sha256(json.dumps(settings).encode()).hexdigest()[:16]
-        ctxt.plugin_id = f"{ctxt.plugin_id}/{fingerprint}"
-        return ctxt
+        return PollyTTSContext(
+            plugin_id=f"{ctxt.plugin_id}/{fingerprint}", lang=ctxt.lang,
+            voice=ctxt.voice, synth_kwargs=ctxt.synth_kwargs,
+            cache_config=self.config)
 
     @staticmethod
     def _prepare_text(sentence):

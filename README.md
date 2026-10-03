@@ -170,3 +170,12 @@ producer and reaps the child. Requests are never automatically replayed.
 See [AWS's streaming documentation](https://docs.aws.amazon.com/polly/latest/dg/bidirectional-streaming.html)
 for engine/region availability. The helper is tested with simulated SDK event streams;
 real AWS interoperability and audible latency must be measured in your environment.
+Language selection follows request language, then the active OVOS session, then
+plugin `lang`, and finally the global OVOS locale. An omitted or null request
+language allows these defaults; it does not force English.
+
+A configured `preloaded_cache` is a root directory. Polly stores audio in a hashed
+subdirectory for each voice, language, region, engine, format, sample rate, and
+lexicon selection. Separate roots also use separate in-memory caches. Existing
+flat cache files are not automatically reused because their synthesis settings
+cannot be verified; matching new contexts reuse their own files across restarts.
