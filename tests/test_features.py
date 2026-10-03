@@ -66,3 +66,60 @@ def test_invalid_controls_fail_before_aws(config, monkeypatch):
     with pytest.raises(ValueError):
         PollyTTS(config=config)
     session.assert_not_called()
+
+
+@pytest.mark.parametrize('changed', [
+    {'engine': 'generative'}, {'sample_rate': '48000'},
+    {'lexicon_names': ['Names']}, {'voice': 'Joanna'},
+    {'lang': 'fr-CA'}, {'region': 'us-west-2'},
+])
+def test_persistent_cache_does_not_cross_synthesis_contexts(plugin, tmp_path, monkeypatch, changed):
+    """Restarted contexts synthesize new audio instead of loading incompatible files."""
+    from pathlib import Path
+    from ovos_plugin_manager.templates.tts import TTSContext
+    tts, stub = plugin
+    root = tmp_path / 'persistent'
+    tts.config.update(preloaded_cache=str(root), persist_cache=True, persist_thresh=1)
+    monkeypatch.setattr('ovos_plugin_manager.utils.tts_cache.get_tmp_cache_dir',
+                        lambda name: str(tmp_path / 'temporary' / name))
+    monkeypatch.setattr(TTSContext, '_caches', {})
+    catalog = [
+        {'Id': 'Matthew', 'LanguageCode': 'en-US'},
+        {'Id': 'Joanna', 'LanguageCode': 'en-US'},
+        {'Id': 'Gabrielle', 'LanguageCode': 'fr-CA'},
+    ]
+    monkeypatch.setattr(tts, 'describe_voices', lambda *a, **k: {'Voices': catalog})
+    stub.add_response('synthesize_speech', {'AudioStream': StreamingBody(io.BytesIO(b'original'), 8)})
+    first, _ = tts.synth('Hello', lang='en-US')
+    for key, value in changed.items():
+        if key not in {'lang', 'voice'}:
+            setattr(tts, key, value)
+    call_kwargs = {'lang': changed.get('lang', 'en-US'), 'voice': changed.get('voice', 'Matthew')}
+    TTSContext._caches.clear()
+    stub.add_response('synthesize_speech', {'AudioStream': StreamingBody(io.BytesIO(b'changed'), 7)})
+    second, _ = tts.synth('Hello', **call_kwargs)
+    assert Path(str(first)).read_bytes() == b'original'
+    assert Path(str(second)).read_bytes() == b'changed'
+    assert Path(str(first)).parent != Path(str(second)).parent
+    assert tts.config['preloaded_cache'] == str(root)
+    TTSContext._caches.clear()
+    # The same settings still reuse the persisted result after another restart.
+    restored, _ = tts.synth('Hello', **call_kwargs)
+    assert str(restored) == str(second)
+
+
+def test_distinct_persistent_roots_do_not_share_in_memory_cache(plugin, tmp_path, monkeypatch):
+    """Two configured roots retain separate cache objects for identical voices."""
+    from ovos_plugin_manager.templates.tts import TTSContext
+    tts, stub = plugin
+    voices(stub)
+    monkeypatch.setattr(TTSContext, '_caches', {})
+    monkeypatch.setattr('ovos_plugin_manager.utils.tts_cache.get_tmp_cache_dir',
+                        lambda name: str(tmp_path / 'temporary' / name))
+    caches = []
+    for name in ('one', 'two'):
+        tts.config['preloaded_cache'] = str(tmp_path / name)
+        ctxt = tts._get_ctxt({'lang': 'fr-CA'})
+        caches.append(ctxt.get_cache(tts.audio_ext))
+    assert caches[0] is not caches[1]
+    assert caches[0].persistent_cache_dir != caches[1].persistent_cache_dir
