@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.0a1) (2026-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.5.0a1...0.6.0a1)
+
+**Merged pull requests:**
+
+- feat: add optional Polly bidirectional HTTP2 bridge [\#37](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/37) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.5.0a1) (2026-10-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.4.0a1...0.5.0a1)
