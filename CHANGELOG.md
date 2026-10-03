@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.4.0a1) (2026-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.1a1...0.4.0a1)
+
+**Merged pull requests:**
+
+- feat: expose Polly audio and pronunciation controls [\#35](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/35) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [0.3.1a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.1a1) (2026-10-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.0a4...0.3.1a1)
