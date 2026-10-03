@@ -148,3 +148,15 @@ subdirectory for each voice, language, region, engine, format, sample rate, and
 lexicon selection. Separate roots also use separate in-memory caches. Existing
 flat cache files are not automatically reused because their synthesis settings
 cannot be verified; matching new contexts reuse their own files across restarts.
+
+Streaming `stop()`/`shutdown()` cancels the active playback task and terminates the
+default player, including buffered audio. Interrupted output is not published or
+cached, and does not trigger follow-up listening. Complete audio already published
+before a stop remains reusable. Repeated stops are safe; a later utterance can play
+normally. Each plugin instance permits one active streaming playback; non-playing
+synthesis can still run concurrently. Custom playback callbacks should implement a
+thread-safe, non-blocking `stream_abort()` that interrupts their player and unblocks
+any pending start/write/stop call. Player callbacks run off the async event loop.
+
+Completed streaming audio is registered using its existing cache path. Registration
+does not increment the framework's persistence counter or choose a different file.
