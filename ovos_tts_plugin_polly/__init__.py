@@ -3,13 +3,33 @@ import copy
 import hashlib
 import json
 import wave
+import os
 import re
 import threading
 import time
 from contextlib import closing
-from ovos_plugin_manager.templates.tts import TTS, TTSValidator
+from ovos_plugin_manager.templates.tts import TTS, TTSContext, TTSValidator
 from ovos_utils import classproperty
 from ovos_utils.lang import standardize_lang_tag
+
+class PollyTTSContext(TTSContext):
+    """Keep custom persistent cache roots isolated by the synthesis context."""
+
+    def __init__(self, *, cache_config, **kwargs):
+        """Retain the plugin cache options for callers using the context directly."""
+        super().__init__(**kwargs)
+        self._cache_config = dict(cache_config)
+
+    def get_cache(self, audio_ext="wav", cache_config=None):
+        """Scope custom cache roots without modifying the caller's configuration."""
+        config = dict(self._cache_config if cache_config is None else cache_config)
+        root = config.get("preloaded_cache")
+        if root:
+            namespace = hashlib.sha256(self.tts_id.encode()).hexdigest()
+            config["preloaded_cache"] = os.path.join(
+                os.path.abspath(os.path.expanduser(str(root))), namespace)
+        return super().get_cache(audio_ext, config)
+
 
 class PollyTTS(TTS):
     """Adapt Amazon Polly synthesis and voice discovery to the OVOS TTS contract."""
@@ -153,11 +173,15 @@ class PollyTTS(TTS):
         ctxt.lang = standardize_lang_tag(lang)
         ctxt.voice = voice
         ctxt.synth_kwargs.update(voice=voice, lang=lang)
+        cache_root = self.config.get("preloaded_cache")
+        cache_root = os.path.abspath(os.path.expanduser(str(cache_root))) if cache_root else None
         settings = [self.region, self.engine, self.output_format,
-                    self.sample_rate, self.lexicon_names]
+                    self.sample_rate, self.lexicon_names, cache_root]
         fingerprint = hashlib.sha256(json.dumps(settings).encode()).hexdigest()[:16]
-        ctxt.plugin_id = f"{ctxt.plugin_id}/{fingerprint}"
-        return ctxt
+        return PollyTTSContext(
+            plugin_id=f"{ctxt.plugin_id}/{fingerprint}", lang=ctxt.lang,
+            voice=ctxt.voice, synth_kwargs=ctxt.synth_kwargs,
+            cache_config=self.config)
 
     @staticmethod
     def _prepare_text(sentence):

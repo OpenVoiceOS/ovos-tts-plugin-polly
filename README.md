@@ -119,3 +119,9 @@ After updating an existing lexicon's contents, clear the corresponding audio cac
 Language selection follows request language, then the active OVOS session, then
 plugin `lang`, and finally the global OVOS locale. An omitted or null request
 language allows these defaults; it does not force English.
+
+A configured `preloaded_cache` is a root directory. Polly stores audio in a hashed
+subdirectory for each voice, language, region, engine, format, sample rate, and
+lexicon selection. Separate roots also use separate in-memory caches. Existing
+flat cache files are not automatically reused because their synthesis settings
+cannot be verified; matching new contexts reuse their own files across restarts.
