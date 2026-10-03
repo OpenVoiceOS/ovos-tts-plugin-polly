@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.5.0a1) (2026-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.4.0a1...0.5.0a1)
+
+**Merged pull requests:**
+
+- feat: stream Polly audio with bounded transport and atomic caching [\#36](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/36) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.4.0a1) (2026-10-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.1a1...0.4.0a1)
