@@ -39,7 +39,7 @@ The plugin reads these config keys:
 
 The Docker image serves Polly behind [`ovos-tts-server`](https://github.com/OpenVoiceOS/ovos-tts-server) on port `9666`, with an ElevenLabs-compatible API. It is published to `ghcr.io/openvoiceos/ovos-tts-plugin-polly`.
 
-Amazon Polly is a cloud engine. The image builds with no credentials. At runtime it needs AWS credentials. Without them, every request fails with an AWS auth error. The plugin reads credentials from its config block, not from `AWS_*` environment variables. Supply them by mounting a `mycroft.conf`.
+Amazon Polly is a cloud engine. The image builds with no credentials. At runtime it needs AWS credentials. Without them, every request fails with an AWS auth error. Use the standard AWS credential provider chain, or supply explicit credentials in a mounted `mycroft.conf`.
 
 Create a `mycroft.conf` and keep it out of git:
 
@@ -116,6 +116,29 @@ returns timing dictionaries using a separate billable request. Only standard and
 neural engines support these marks. They are not substituted for OVOS phoneme data.
 Cache namespaces include region, engine, format, sample rate, and lexicon names.
 After updating an existing lexicon's contents, clear the corresponding audio cache.
+
+## Streaming and transport
+
+Set `enable_streaming: true` to use OVOS streaming playback. The plugin implements
+`StreamingTTS` and yields audio as it arrives; `get_tts()` remains synchronous for
+existing callers. Install `ffplay` for MP3/Ogg/Opus streaming, or provide compatible
+OVOS playback callbacks. PCM streaming includes a WAV header. Mu-law/A-law need
+callbacks configured with their raw format and 8000 Hz rate.
+
+Both paths use bounded reads, close response bodies, and publish files atomically.
+Interrupted downloads do not replace a completed audio file. Streaming file output
+repairs WAV lengths and registers completed OVOS cache files. Network operations run
+in worker threads; audio chunks are consumed with backpressure. No automatic retry
+replays a partially spoken response.
+
+Transport settings: `connect_timeout` (5 seconds), `read_timeout` (30 seconds),
+`max_attempts` (3 total SDK attempts), `max_pool_connections` (10), and `chunk_size`
+(4096 bytes; allowed 256–1048576). TCP keepalive is enabled. Measure your workload
+before adjusting these values; larger pools do not raise AWS service quotas.
+
+Without explicit keys the normal AWS credential provider chain is used, including
+environment variables and workload roles. Optional `profile_name` and `session_token`
+are supported. Never put credentials in committed configuration files.
 Language selection follows request language, then the active OVOS session, then
 plugin `lang`, and finally the global OVOS locale. An omitted or null request
 language allows these defaults; it does not force English.
@@ -125,3 +148,15 @@ subdirectory for each voice, language, region, engine, format, sample rate, and
 lexicon selection. Separate roots also use separate in-memory caches. Existing
 flat cache files are not automatically reused because their synthesis settings
 cannot be verified; matching new contexts reuse their own files across restarts.
+
+Streaming `stop()`/`shutdown()` cancels the active playback task and terminates the
+default player, including buffered audio. Interrupted output is not published or
+cached, and does not trigger follow-up listening. Complete audio already published
+before a stop remains reusable. Repeated stops are safe; a later utterance can play
+normally. Each plugin instance permits one active streaming playback; non-playing
+synthesis can still run concurrently. Custom playback callbacks should implement a
+thread-safe, non-blocking `stream_abort()` that interrupts their player and unblocks
+any pending start/write/stop call. Player callbacks run off the async event loop.
+
+Completed streaming audio is registered using its existing cache path. Registration
+does not increment the framework's persistence counter or choose a different file.
