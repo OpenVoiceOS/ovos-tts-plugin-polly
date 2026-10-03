@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1a1](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.1a1) (2026-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.0a4...0.3.1a1)
+
+**Merged pull requests:**
+
+- fix: resolve compatible Polly voices and preserve SSML [\#34](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/34) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [0.3.0a4](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.3.0a4) (2026-09-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.3.0a3...0.3.0a4)
