@@ -39,4 +39,4 @@ where = ["."]
 include = ["ovos_tts_plugin_polly*"]
 
 [tool.setuptools.package-data]
-ovos_tts_plugin_polly = ["*.json"]
+ovos_tts_plugin_polly = ["*.json", "bridge/*.json", "bridge/*.mjs"]
