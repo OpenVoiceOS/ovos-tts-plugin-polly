@@ -116,3 +116,6 @@ returns timing dictionaries using a separate billable request. Only standard and
 neural engines support these marks. They are not substituted for OVOS phoneme data.
 Cache namespaces include region, engine, format, sample rate, and lexicon names.
 After updating an existing lexicon's contents, clear the corresponding audio cache.
+Language selection follows request language, then the active OVOS session, then
+plugin `lang`, and finally the global OVOS locale. An omitted or null request
+language allows these defaults; it does not force English.
