@@ -9,12 +9,13 @@ import tempfile
 import threading
 import time
 import wave
-from contextlib import closing
+from contextlib import closing, suppress
+from pathlib import Path
 
 import boto3
 from botocore.config import Config
 from ovos_plugin_manager.templates.tts import StreamingTTS, TTSContext, TTSValidator
-from ovos_plugin_manager.utils.tts_cache import hash_sentence
+from ovos_plugin_manager.utils.tts_cache import AudioFile, hash_sentence
 from ovos_utils import classproperty
 from ovos_utils.lang import standardize_lang_tag
 
@@ -43,6 +44,8 @@ class PollyTTS(StreamingTTS):
     """Adapt Amazon Polly synthesis and voice discovery to the OVOS TTS contract."""
     def __init__(self, *args, **kwargs):
         """Initialize the OVOS adapter and a reusable regional Polly client."""
+        self._active_streams = {}
+        self._streams_lock = threading.Lock()
         ssml_tags = [
             "speak",
             "say-as",
@@ -307,48 +310,130 @@ class PollyTTS(StreamingTTS):
         finally:
             stream.close()
 
+    def init(self, bus=None, playback=None, callbacks=None):
+        """Use interruptible default callbacks while accepting custom players."""
+        from .playback import PollyStreamingCallbacks
+        if callbacks is None:
+            callbacks = PollyStreamingCallbacks(bus, tts_config=self.config)
+        super().init(bus, playback, callbacks)
+
+    @staticmethod
+    def _abort_player(callbacks):
+        """Request prompt interruption from players supporting stream_abort."""
+        abort = getattr(callbacks, "stream_abort", None)
+        if callable(abort):
+            abort()
+
+    def stop(self):
+        """Stop queued audio and interrupt active streaming playback on its loop."""
+        super().stop()
+        with self._streams_lock:
+            active = [(task, state) for task, state in self._active_streams.items()
+                      if not state[1].is_set()]
+            for _, (_, stopped, _) in active:
+                # Repeated stop calls must not cancel cleanup a second time.
+                stopped.set()
+        for task, (loop, stopped, callbacks) in active:
+            self._abort_player(callbacks)
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(task.cancel)
+
+    async def _playback_call(self, callbacks, method, *args):
+        """Keep pipe writes off the event loop and finish cancelled worker calls."""
+        pending = asyncio.create_task(asyncio.to_thread(getattr(callbacks, method), *args))
+        try:
+            return await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            self._abort_player(callbacks)
+            # A late stream_start can create a player after the first abort.
+            try:
+                with suppress(Exception):
+                    await pending
+            finally:
+                self._abort_player(callbacks)
+            raise
+
+    def _register_stream_audio(self, sentence, wav_file, kwargs):
+        """Register an existing OVOS cache file without advancing persistence."""
+        sentence_hash = hash_sentence(sentence)
+        path = Path(wav_file).absolute()
+        if path.name != f"{sentence_hash}.{self.audio_ext}":
+            return
+        ctxt = self._get_ctxt(kwargs)
+        cache = ctxt.get_cache(self.audio_ext, self.config)
+        allowed = {cache.temporary_cache_dir.absolute(), cache.persistent_cache_dir.absolute()}
+        if path.parent in allowed:
+            audio = AudioFile(path.parent, sentence_hash, self.audio_ext)
+            self._cache_sentence(sentence, ctxt.lang, audio, cache)
+
     async def generate_audio(self, sentence, wav_file, play_streaming=True,
                              listen=False, message=None, plugin_kwargs=None):
+        """Stream playback and atomically publish only complete audio files."""
         kwargs = plugin_kwargs or {}
         path = self._temporary_audio(wav_file)
         started = False
+        completed = False
+        stopped = threading.Event()
+        task = asyncio.current_task()
+        callbacks = self.callbacks if play_streaming else None
+        if play_streaming:
+            with self._streams_lock:
+                if self._active_streams:
+                    os.unlink(path)
+                    raise RuntimeError("Streaming playback is already active")
+                self._active_streams[task] = (asyncio.get_running_loop(), stopped, callbacks)
         chunks = self.stream_tts(sentence, **kwargs)
         try:
             if play_streaming:
-                self.callbacks.stream_start(message)
                 started = True
+                await self._playback_call(callbacks, "stream_start", message)
             with open(path, "wb") as audio:
                 async for chunk in chunks:
+                    if stopped.is_set():
+                        raise asyncio.CancelledError()
                     audio.write(chunk)
                     if play_streaming:
-                        self.callbacks.stream_chunk(chunk)
+                        await self._playback_call(callbacks, "stream_chunk", chunk)
                 if self.output_format == "pcm":
                     length = audio.tell()
                     audio.seek(4)
                     audio.write(struct.pack("<I", length - 8))
                     audio.seek(40)
                     audio.write(struct.pack("<I", length - 44))
+            if stopped.is_set():
+                raise asyncio.CancelledError()
             os.replace(path, wav_file)
             if self.enable_cache:
-                ctxt = await asyncio.to_thread(self._get_ctxt, kwargs)
-                cache = ctxt.get_cache(self.audio_ext, self.config)
-                cached_audio = cache.define_audio_file(hash_sentence(sentence))
-                # Only register when the caller provided the OVOS cache path.
-                if os.path.abspath(str(cached_audio)) == os.path.abspath(wav_file):
-                    self._cache_sentence(sentence, ctxt.lang, cached_audio, cache)
+                await asyncio.to_thread(self._register_stream_audio, sentence, wav_file, kwargs)
+            completed = True
             return wav_file
         finally:
-            await chunks.aclose()
-            if os.path.exists(path):
-                os.unlink(path)
-            if started:
-                self.callbacks.stream_stop(listen, message)
+            try:
+                await chunks.aclose()
+            finally:
+                if os.path.exists(path):
+                    os.unlink(path)
+                try:
+                    if started:
+                        if not completed or stopped.is_set():
+                            self._abort_player(callbacks)
+                        await self._playback_call(
+                            callbacks, "stream_stop", listen and completed and not stopped.is_set(), message)
+                finally:
+                    if play_streaming:
+                        with self._streams_lock:
+                            self._active_streams.pop(task, None)
 
     def _execute(self, sentence, ident, listen, **kwargs):
+        """Preserve resolved language settings and treat user interruption as normal."""
         if self.config.get("enable_streaming"):
             ctxt = self._get_ctxt(kwargs)
             kwargs.update(ctxt.synth_kwargs)
-        return super()._execute(sentence, ident, listen, **kwargs)
+        try:
+            return super()._execute(sentence, ident, listen, **kwargs)
+        except asyncio.CancelledError:
+            # The synchronous OVOS speech handler must finish its end_audio path.
+            return None
 
     async def stream_text(self, text_chunks, lang=None, voice=None):
         """Bidirectional plain-text input and raw audio output via optional Node SDK."""
