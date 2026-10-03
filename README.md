@@ -100,6 +100,28 @@ varies by engine; AWS remains authoritative for unsupported SSML errors.
 Run credential-free regression tests with `pip install -e . pytest pytest-asyncio`
 and `pytest -q`.
 
+## Audio and pronunciation controls
+
+- `output_format`: `mp3` (default), `ogg_vorbis`, `ogg_opus`, `pcm`, `mulaw`, or `alaw`.
+  PCM is saved as a mono 16-bit WAV so file playback has sample-rate metadata.
+  Mu-law/A-law remain raw telephony data and require a compatible player.
+- `sample_rate`: a Polly-supported rate for the format (string or integer).
+  Defaults: standard MP3/Vorbis 22050; other engines 24000; PCM 16000;
+  Opus 48000; mu-law/A-law 8000. Increasing the rate does not improve pronunciation.
+- `lexicon_names`: up to five existing pronunciation lexicons in the selected AWS
+  region. Polly applies only those matching the selected voice's language.
+
+`get_speech_marks(text, lang=None, voice=None, mark_types=("sentence", "word", "viseme"))`
+returns timing dictionaries using a separate billable request. Only standard and
+neural engines support these marks. They are not substituted for OVOS phoneme data.
+Cache namespaces include region, engine, format, sample rate, and lexicon names.
+After updating an existing lexicon's contents, clear the corresponding audio cache.
 Language selection follows request language, then the active OVOS session, then
 plugin `lang`, and finally the global OVOS locale. An omitted or null request
 language allows these defaults; it does not force English.
+
+A configured `preloaded_cache` is a root directory. Polly stores audio in a hashed
+subdirectory for each voice, language, region, engine, format, sample rate, and
+lexicon selection. Separate roots also use separate in-memory caches. Existing
+flat cache files are not automatically reused because their synthesis settings
+cannot be verified; matching new contexts reuse their own files across restarts.

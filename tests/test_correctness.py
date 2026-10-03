@@ -12,7 +12,7 @@ def test_language_selection_and_bilingual_parameter(plugin, tmp_path):
     stream = StreamingBody(io.BytesIO(b'audio'), 5)
     stub.add_response('synthesize_speech', {'AudioStream': stream}, {
         'Text': 'Bonjour', 'TextType': 'text', 'OutputFormat': 'mp3',
-        'Engine': 'neural', 'VoiceId': 'Gabrielle', 'LanguageCode': 'fr-CA'})
+        'Engine': 'neural', 'VoiceId': 'Gabrielle', 'LanguageCode': 'fr-CA', 'SampleRate': '24000'})
     path = tmp_path / 'test.mp3'
     assert tts.get_tts('Bonjour', str(path), lang='fr-ca') == (str(path), None)
     assert path.read_bytes() == b'audio'
