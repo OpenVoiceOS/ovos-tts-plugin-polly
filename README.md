@@ -99,3 +99,7 @@ varies by engine; AWS remains authoritative for unsupported SSML errors.
 
 Run credential-free regression tests with `pip install -e . pytest pytest-asyncio`
 and `pytest -q`.
+
+Language selection follows request language, then the active OVOS session, then
+plugin `lang`, and finally the global OVOS locale. An omitted or null request
+language allows these defaults; it does not force English.

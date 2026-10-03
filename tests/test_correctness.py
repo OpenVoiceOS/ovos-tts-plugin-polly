@@ -72,3 +72,36 @@ def test_language_codes(lang, expected):
 def test_angle_brackets_in_plain_text(text):
     """Email addresses and unrelated angle-bracket tokens must not enable SSML."""
     assert PollyTTS._prepare_text(text) == (text, 'text')
+
+
+@pytest.mark.parametrize('call_kwargs', [{}, {'lang': None}])
+def test_framework_uses_configured_language_without_request_or_session(plugin, monkeypatch, call_kwargs):
+    """A configured French locale reaches synthesis when the caller has no locale."""
+    tts, stub = plugin
+    tts.config.update(lang='fr-CA', voice='Gabrielle')
+    monkeypatch.setattr('ovos_plugin_manager.templates.tts.dig_for_message', lambda: None)
+    voices(stub)
+    ctxt = tts._get_ctxt(call_kwargs)
+    assert ctxt.lang.lower() == 'fr-ca'
+    assert ctxt.voice == 'Gabrielle'
+    assert ctxt.synth_kwargs == {'lang': 'fr-CA', 'voice': 'Gabrielle'}
+    assert call_kwargs in ({}, {'lang': None})
+
+
+@pytest.mark.parametrize('call_kwargs,session_lang,expected', [
+    ({'lang': 'fr-CA'}, 'en-US', 'fr-CA'),
+    ({}, 'en-US', 'en-US'),
+    ({'lang': None}, 'en-US', 'en-US'),
+])
+def test_request_and_session_language_override_plugin_default(plugin, monkeypatch, call_kwargs, session_lang, expected):
+    """Explicit call_kwargs language wins over session language, which wins over config."""
+    from types import SimpleNamespace
+    tts, stub = plugin
+    tts.config.update(lang='fr-CA', voice='Gabrielle')
+    monkeypatch.setattr('ovos_plugin_manager.templates.tts.SessionManager.get',
+                        lambda message=None: SimpleNamespace(lang=session_lang))
+    voice = 'Gabrielle' if expected == 'fr-CA' else 'Matthew'
+    voices(stub, expected, (voice,))
+    ctxt = tts._get_ctxt(dict(call_kwargs, message=object()))
+    assert ctxt.synth_kwargs == {'lang': expected, 'voice': voice}
+    assert ctxt.lang.lower() == expected.lower()

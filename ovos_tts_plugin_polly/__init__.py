@@ -6,6 +6,7 @@ import time
 from contextlib import closing
 from ovos_plugin_manager.templates.tts import TTS, TTSValidator
 from ovos_utils import classproperty
+from ovos_utils.lang import standardize_lang_tag
 
 class PollyTTS(TTS):
     """Adapt Amazon Polly synthesis and voice discovery to the OVOS TTS contract."""
@@ -113,10 +114,18 @@ class PollyTTS(TTS):
 
     def _get_ctxt(self, kwargs=None):
         """Resolve the effective voice and language before OVOS chooses an audio cache."""
-        ctxt = super()._get_ctxt(dict(kwargs or {}))
+        request = dict(kwargs or {})
+        if not request.get("lang"):
+            request.pop("lang", None)
+        ctxt = super()._get_ctxt(request)
+        # The base context puts request/session language in synth_kwargs, but
+        # falls straight back to the global locale when neither is present.
+        language = (ctxt.synth_kwargs.get("lang") or
+                    self.config.get("lang") or ctxt.lang)
         # OVOS injects the configured voice; distinguish it from a caller override.
         voice, lang = self._resolve_voice(
-            ctxt.lang, (kwargs or {}).get("voice"))
+            language, (kwargs or {}).get("voice"))
+        ctxt.lang = standardize_lang_tag(lang)
         ctxt.voice = voice
         ctxt.synth_kwargs.update(voice=voice, lang=lang)
         return ctxt
