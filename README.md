@@ -160,8 +160,11 @@ whereas `stream_tts()` wraps it in WAV. No speech marks or audio caching are app
 to incremental text sessions. This API is for applications supplying incremental
 text; the regular OVOS speech path uses `stream_tts()`.
 
-The helper uses the standard AWS credential chain; explicit plugin credentials
-and profile settings are passed privately through the child environment.
+The helper uses a fresh credential snapshot from the Python AWS session for each
+stream, including refreshed role/session tokens. Credentials are passed privately
+through the child environment; profile selectors and stale tokens are removed so
+Node cannot select a different AWS identity. Existing streams retain their signing
+credentials until completion; new streams resolve credentials again.
 `bidirectional_command` can select an installed helper using an argv list, without
 a shell. `bidirectional_timeout` (default 30 seconds) bounds output inactivity and
 helper shutdown; tune it for gaps in your text producer. Cancellation stops the

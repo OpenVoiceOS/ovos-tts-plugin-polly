@@ -122,7 +122,8 @@ class PollyTTS(StreamingTTS):
         self.chunk_size = int(self.config.get("chunk_size", 4096))
         if not 256 <= self.chunk_size <= 1048576:
             raise ValueError("chunk_size must be between 256 and 1048576 bytes")
-        self.polly = boto3.Session(**session_kwargs).client("polly", config=Config(
+        self.aws_session = boto3.Session(**session_kwargs)
+        self.polly = self.aws_session.client("polly", config=Config(
             connect_timeout=float(self.config.get("connect_timeout", 5)),
             read_timeout=float(self.config.get("read_timeout", 30)),
             max_pool_connections=int(self.config.get("max_pool_connections", 10)),

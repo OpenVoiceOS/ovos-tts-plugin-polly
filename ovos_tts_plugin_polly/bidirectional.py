@@ -5,6 +5,26 @@ import json
 import os
 from pathlib import Path
 
+from botocore.exceptions import NoCredentialsError
+
+
+def _helper_environment(tts):
+    """Use the Python session's current identity, including refreshed role tokens."""
+    credentials = tts.aws_session.get_credentials()
+    if credentials is None:
+        raise NoCredentialsError()
+    frozen = credentials.get_frozen_credentials()
+    environment = os.environ.copy()
+    # The Node SDK prioritizes profiles over environment credentials; forwarding
+    # both would let discovery and synthesis run under different AWS identities.
+    for name in ("AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_SESSION_TOKEN", "AWS_SECURITY_TOKEN"):
+        environment.pop(name, None)
+    environment.update(AWS_ACCESS_KEY_ID=frozen.access_key,
+                       AWS_SECRET_ACCESS_KEY=frozen.secret_key)
+    if frozen.token:
+        environment["AWS_SESSION_TOKEN"] = frozen.token
+    return environment
+
 
 async def stream_text(tts, text_chunks, lang=None, voice=None):
     """Yield raw Polly bytes while consuming an async iterator of plain text."""
@@ -17,14 +37,7 @@ async def stream_text(tts, text_chunks, lang=None, voice=None):
     request = await asyncio.to_thread(tts._synthesis_request, '', lang, voice)
     request.pop('Text')
     request.pop('TextType')
-    environment = os.environ.copy()
-    if tts.key_id:
-        environment.update(AWS_ACCESS_KEY_ID=tts.key_id, AWS_SECRET_ACCESS_KEY=tts.key)
-        environment.pop('AWS_SESSION_TOKEN', None)
-        if tts.config.get('session_token'):
-            environment['AWS_SESSION_TOKEN'] = tts.config['session_token']
-    if tts.config.get('profile_name'):
-        environment['AWS_PROFILE'] = tts.config['profile_name']
+    environment = await asyncio.to_thread(_helper_environment, tts)
     timeout = float(tts.config.get('bidirectional_timeout', 30))
     if timeout <= 0:
         raise ValueError('bidirectional_timeout must be positive')

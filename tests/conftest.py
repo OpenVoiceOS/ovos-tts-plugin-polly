@@ -1,6 +1,7 @@
 import boto3
 import pytest
 from botocore.stub import Stubber
+from botocore.credentials import Credentials
 from ovos_tts_plugin_polly import PollyTTS
 
 
@@ -11,6 +12,8 @@ def plugin(monkeypatch):
                           aws_access_key_id='testing', aws_secret_access_key='testing')
     monkeypatch.setattr('boto3.Session.client', lambda *a, **k: client)
     tts = PollyTTS(config={'voice': 'Matthew', 'engine': 'neural'})
+    monkeypatch.setattr(tts.aws_session, 'get_credentials',
+                        lambda: Credentials('testing', 'testing'))
     with Stubber(client) as stub:
         yield tts, stub
         stub.assert_no_pending_responses()
