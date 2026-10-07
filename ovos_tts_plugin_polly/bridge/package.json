@@ -10,7 +10,7 @@
     "test": "node --test ../../tests/bridge.test.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-polly": "3.1141.0",
+    "@aws-sdk/client-polly": "3.1147.0",
     "@smithy/node-http-handler": "4.12.1"
   }
 }
