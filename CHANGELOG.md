@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a3](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.1a3) (2026-10-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.6.1a2...0.6.1a3)
+
+**Merged pull requests:**
+
+- Update dependency @aws-sdk/client-polly to v3.1148.0 [\#50](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/50) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.6.1a2](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.1a2) (2026-10-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.6.1a1...0.6.1a2)
