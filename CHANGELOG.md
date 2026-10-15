@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.1a5](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.1a5) (2026-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.6.1a4...0.6.1a5)
+
+**Merged pull requests:**
+
+- Update docker/metadata-action action to v6 [\#28](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/28) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [0.6.1a4](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.1a4) (2026-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.6.1a3...0.6.1a4)
+
+**Merged pull requests:**
+
+- Update docker/login-action action to v4 [\#27](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/27) ([renovate[bot]](https://github.com/apps/renovate))
+- Update python Docker tag to v3.15 [\#23](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/pull/23) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.6.1a3](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/tree/0.6.1a3) (2026-10-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-tts-plugin-polly/compare/0.6.1a2...0.6.1a3)
