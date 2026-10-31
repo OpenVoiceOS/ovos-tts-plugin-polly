@@ -11,6 +11,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-polly": "3.1158.0",
-    "@smithy/node-http-handler": "4.12.1"
+    "@smithy/node-http-handler": "4.14.1"
   }
 }
